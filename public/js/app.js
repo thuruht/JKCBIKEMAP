@@ -394,24 +394,43 @@ async function init() {
   }
 
   if (pickOnMapBtn) {
+    const drawingControls = document.getElementById('drawing-controls');
+    const finishDrawingBtn = document.getElementById('finishDrawingBtn');
+    let stopDrawingFn = null;
+
     pickOnMapBtn.addEventListener('click', () => {
       const type = document.getElementById('f_type').value;
       const geomField = document.getElementById('f_geometry');
-      
+
       if (type === 'point') {
         enableMapPicker((coords) => {
           geomField.value = JSON.stringify({ type: 'Point', coordinates: coords });
         });
       } else {
-        alert('Click on the map to add the FIRST point of the line. Manual editing recommended for complex lines.');
-        enableMapPicker((coords) => {
-          const current = JSON.parse(geomField.value || '{"type":"LineString","coordinates":[]}');
-          current.coordinates.push(coords);
-          geomField.value = JSON.stringify(current);
-        });
+        closeModal(); // Hide modal during drawing
+        if (drawingControls) drawingControls.style.display = 'flex';
+
+        stopDrawingFn = startLineDrawing(
+          (points) => {
+            // Visual update only
+          },
+          (finalPoints) => {
+            openModal(null, 'line'); // Re-open with points
+            document.getElementById('f_geometry').value = JSON.stringify({ type: 'LineString', coordinates: finalPoints });
+            if (drawingControls) drawingControls.style.display = 'none';
+          }
+        );
       }
     });
-  }
+
+    if (finishDrawingBtn) {
+      finishDrawingBtn.addEventListener('click', () => {
+        if (stopDrawingFn) {
+          stopDrawingFn();
+          stopDrawingFn = null;
+        }
+      });
+    }  }
 
   if (featureForm) {
     featureForm.addEventListener('submit', async (e) => {

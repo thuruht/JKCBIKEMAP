@@ -254,3 +254,36 @@ export function enableMapPicker(onPicked) {
   };
   map.on('click', onClick);
 }
+
+let tempDrawingLine = null;
+let drawingPoints = [];
+
+export function startLineDrawing(onUpdate, onFinish) {
+  if (tempDrawingLine) map.removeLayer(tempDrawingLine);
+  drawingPoints = [];
+  tempDrawingLine = L.polyline([], { color: '#0ea5e9ff', weight: 4, dashArray: '5 5' }).addTo(map);
+  
+  map.getContainer().style.cursor = 'crosshair';
+  
+  const onClick = (e) => {
+    const p = [e.latlng.lng, e.latlng.lat];
+    drawingPoints.push(p);
+    tempDrawingLine.setLatLngs(drawingPoints.map(c => [c[1], c[0]]));
+    if (onUpdate) onUpdate(drawingPoints);
+  };
+  
+  map.on('click', onClick);
+
+  // Return a cleanup/finish function
+  return () => {
+    map.off('click', onClick);
+    map.getContainer().style.cursor = '';
+    const finalPoints = [...drawingPoints];
+    if (tempDrawingLine) {
+      map.removeLayer(tempDrawingLine);
+      tempDrawingLine = null;
+    }
+    drawingPoints = [];
+    if (onFinish) onFinish(finalPoints);
+  };
+}

@@ -1,5 +1,5 @@
 import { fetchFeatures, createFeature, updateFeature } from './api.js';
-import { initLeafletMap, renderMap, flyToFeature, enableMapPicker, toggleLayer, fetchAmenities, map } from './map.js';
+import { initLeafletMap, renderMap, flyToFeature, enableMapPicker, toggleLayer, fetchAmenities, map, switchBasemap } from './map.js';
 import { updateInfoCard, renderLegend, initThemeToggle, openModal, closeModal, openHelpModal, closeHelpModal, switchTab } from './ui.js';
 import { downloadGeoJSON } from './utils.js';
 
@@ -59,12 +59,25 @@ function updateAdminUI() {
 async function refreshData() {
   try {
     allFeatures = await fetchFeatures();
-    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin));
+    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag);
     renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isAdmin)));
   } catch (err) {
     console.error('Failed to fetch features:', err);
   }
 }
+
+async function handleMarkerDrag(feature, newCoords) {
+  if (!isAdmin) return;
+  const token = localStorage.getItem('ADMIN_TOKEN');
+  try {
+    const updated = { ...feature, geometry: { type: 'Point', coordinates: newCoords } };
+    await updateFeature(feature.id, updated, token);
+    console.log(`Updated position for ${feature.name}`);
+  } catch (err) {
+    alert('Failed to update marker position: ' + err.message);
+  }
+}
+
 
 function initCryptAnimations() {
   const scanline = document.querySelector('.crypt-scan');
@@ -103,7 +116,7 @@ async function init() {
         (f.public_description && f.public_description.toLowerCase().includes(q)) ||
         f.category.toLowerCase().includes(q)
       );
-      renderMap(filtered, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin));
+      renderMap(filtered, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag);
       renderLegend(filtered, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isAdmin)));
     });
   }
@@ -243,6 +256,11 @@ async function init() {
   if (officialToggle) officialToggle.addEventListener('change', (e) => toggleLayer('official', e.target.checked));
   if (reportsToggle) reportsToggle.addEventListener('change', (e) => toggleLayer('reports', e.target.checked));
 
+  const basemapSelect = document.getElementById('basemapSelect');
+  if (basemapSelect) {
+    basemapSelect.addEventListener('change', (e) => switchBasemap(e.target.value));
+  }
+
   if (amenitiesToggle) {
     amenitiesToggle.addEventListener('change', (e) => {
       toggleLayer('amenities', e.target.checked);
@@ -250,9 +268,13 @@ async function init() {
     });
   }
 
+  let moveTimeout;
   if (map) {
     map.on('moveend', () => {
-      if (amenitiesToggle && amenitiesToggle.checked) fetchAmenities();
+      clearTimeout(moveTimeout);
+      moveTimeout = setTimeout(() => {
+        if (amenitiesToggle && amenitiesToggle.checked) fetchAmenities();
+      }, 500); // 500ms debounce
     });
   }
 

@@ -18,7 +18,7 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
     );
   }
 
-  const statusColor = f.status === 'active' ? '#10b981' : f.status === 'caution' ? '#f59e0b' : '#ef4444';
+  const statusColor = f.status === 'active' ? '#10b981ff' : f.status === 'caution' ? '#f59e0bff' : '#ef4444ff';
   
   content.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: flex-start; padding-right: 20px; gap: 8px;">

@@ -32,7 +32,15 @@ export default {
     }
 
     // Serve static assets
-    return env.ASSETS.fetch(request);
+    const response = await env.ASSETS.fetch(request);
+    const newHeaders = new Headers(response.headers);
+    newHeaders.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org; connect-src 'self' https://overpass-api.de;");
+    
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: newHeaders
+    });
   },
 };
 
@@ -253,6 +261,10 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
 function jsonResponse(data: any, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    headers: { 
+      "Content-Type": "application/json", 
+      "Access-Control-Allow-Origin": "*",
+      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com; connect-src 'self' https://overpass-api.de;"
+    },
   });
 }

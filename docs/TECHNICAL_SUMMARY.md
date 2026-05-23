@@ -9,6 +9,7 @@ A high-fidelity rider intelligence tool for the Kansas City metro. Unlike generi
 - **Animated Grid:** A high-contrast, pulsing background grid combined with a GSAP-powered vertical "scanline" effect.
 - **GSAP Polish:** Smooth slide-in transitions for the Info Card and staggered "pop-in" animations for sidebar tiles.
 - **Rider-First Design:** Large hit areas for mobile/glove-friendly navigation and high-contrast typography (`Instrument Serif`).
+- **#RRGGBBAA Standard:** All colors across CSS and JavaScript use the strict 8-digit hex format for precision and consistency.
 
 ### 2. Community Intelligence (Field Reports)
 - **Dual Longevity:**
@@ -29,11 +30,13 @@ A high-fidelity rider intelligence tool for the Kansas City metro. Unlike generi
 - **Worker API:** TypeScript-based backend handling features, search, and admin actions.
 - **D1 Database:** Relational SQL (SQLite) for structured feature data and revision history.
 - **Static Assets:** High-performance frontend hosting via Cloudflare Workers Assets.
-- **Stadia Maps Base:** Switched to **CartoDB Voyager** for high-contrast, reliable rendering without referrer issues.
+- **Localized Dependencies:** Leaflet and GSAP are hosted locally in `/vendor/` to remove reliance on external CDNs.
+- **Basemap Variety:** Defaults to **CartoDB Dark Matter**, with high-performance options for Voyager, OSM, and Terrain.
 
 ## Admin System
 - **Integrated Login:** Dedicated authentication view in the sidebar replaces browser alerts.
 - **Persistent Sessions:** Admin state is persisted locally for a seamless management experience.
+- **Admin Marker Dragging:** Admins can drag point markers directly on the map to fine-tune coordinates. Changes save instantly.
 - **Tools:** In-browser tools for adding/editing points and lines, and a one-click MARC data update.
 
 ## Data Model Updates

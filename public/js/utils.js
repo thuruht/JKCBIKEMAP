@@ -1,12 +1,12 @@
 import { categoryMeta } from './config.js';
 
 export function getCategoryMeta(cat) {
-  return categoryMeta[cat] || {swatch: '#444444', copy: 'Bike map feature.'};
+  return categoryMeta[cat] || {swatch: '#444444ff', copy: 'Bike map feature.'};
 }
 
 export function iconFor(f) {
   const meta = getCategoryMeta(f.category);
-  const statusColor = f.status === 'active' ? 'white' : f.status === 'caution' ? '#f59e0b' : '#ef4444';
+  const statusColor = f.status === 'active' ? '#ffffffff' : f.status === 'caution' ? '#f59e0bff' : '#ef4444ff';
   const ringWidth = f.status === 'active' ? '2px' : '3px';
   
   return L.divIcon({

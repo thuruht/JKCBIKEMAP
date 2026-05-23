@@ -6,19 +6,19 @@
   --text-xl: clamp(1.5rem, 1.2rem + 1.25vw, 2.25rem);
   --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
   --space-5: 1.25rem; --space-6: 1.5rem; --space-8: 2rem; --space-10: 2.5rem; --space-12: 3rem;
-  --color-bg:#f7f6f2; --color-surface:#f9f8f5; --color-surface-2:#fbfbf9; --color-surface-offset:#edeae5;
-  --color-border:#d4d1ca; --color-text:#28251d; --color-text-muted:#67655f; --color-text-faint:#96948d;
-  --color-primary:#01696f; --color-primary-soft:#d7ece9; --color-card:rgba(249,248,245,.88);
-  --shadow-sm:0 1px 2px rgba(40,37,29,.06); --shadow-md:0 12px 32px rgba(40,37,29,.12);
+  --color-bg:#f7f6f2ff; --color-surface:#f9f8f5ff; --color-surface-2:#fbfbf9ff; --color-surface-offset:#edeae5ff;
+  --color-border:#d4d1caff; --color-text:#28251dff; --color-text-muted:#67655fff; --color-text-faint:#96948dff;
+  --color-primary:#01696fff; --color-primary-soft:#d7ece9ff; --color-card:#f9f8f5e0;
+  --shadow-sm:0 1px 2px #28251d0f; --shadow-md:0 12px 32px #28251d1f;
   --radius-md:.85rem; --radius-lg:1.2rem; --radius-full:999px;
   --font-display:'Instrument Serif', Georgia, serif; --font-body:'Work Sans', Arial, sans-serif;
   --sidebar-width: 320px;
 }
 [data-theme="dark"] {
-  --color-bg:#171614; --color-surface:#1c1b19; --color-surface-2:#201f1d; --color-surface-offset:#2a2826;
-  --color-border:#393836; --color-text:#e3e0d8; --color-text-muted:#b0aca2; --color-text-faint:#8b877d;
-  --color-primary:#4f98a3; --color-primary-soft:rgba(79,152,163,.18); --color-card:rgba(28,27,25,.84);
-  --shadow-sm:0 1px 2px rgba(0,0,0,.25); --shadow-md:0 12px 32px rgba(0,0,0,.32);
+  --color-bg:#171614ff; --color-surface:#1c1b19ff; --color-surface-2:#201f1dff; --color-surface-offset:#2a2826ff;
+  --color-border:#393836ff; --color-text:#e3e0d8ff; --color-text-muted:#b0aca2ff; --color-text-faint:#8b877dff;
+  --color-primary:#4f98a3ff; --color-primary-soft:#4f98a32e; --color-card:#1c1b19d6;
+  --shadow-sm:0 1px 2px #00000040; --shadow-md:0 12px 32px #00000052;
 }
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}

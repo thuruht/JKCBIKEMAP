@@ -11,6 +11,9 @@ binding = "DB"
 database_name = "jkcbikemap_db"
 database_id = "9140840a-3ad5-4834-bdbb-fa5dc2a4bf1a"
 
+[[send_email]]
+name = "SEND_EMAIL"
+
 [[routes]]
 pattern = "jojomap.kcmo.xyz"
 custom_domain = true

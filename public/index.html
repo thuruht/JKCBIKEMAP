@@ -67,6 +67,25 @@
             </label>
           </div>
 
+          <div id="user-auth-section" class="panel" style="margin-bottom: var(--space-4); background: var(--color-surface);">
+            <div id="user-logged-out">
+              <p style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 8px;">Login to contribute rider intelligence.</p>
+              <div style="display: flex; gap: 4px;">
+                <input type="email" id="loginEmailInput" class="jump-btn" style="flex: 1; font-size: 11px; background: var(--color-bg);" placeholder="rider@kcmo.xyz">
+                <button id="sendMagicLinkBtn" class="jump-btn" style="width: auto; background: var(--color-primary); color: white; font-size: 11px;">Send Link</button>
+              </div>
+            </div>
+            <div id="user-logged-in" style="display: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <p style="font-size: 11px; color: var(--color-primary); font-weight: 600;">✓ Authenticated</p>
+                  <p id="userEmailDisplay" style="font-size: 10px; color: var(--color-text-muted);"></p>
+                </div>
+                <button id="userLogoutBtn" class="jump-btn" style="width: auto; padding: 2px 6px; font-size: 9px; background: var(--color-surface-offset);">Logout</button>
+              </div>
+            </div>
+          </div>
+
           <h2>Navigate</h2>
           <select id="categorySelect" class="jump-btn" style="width: 100%; padding: var(--space-2); font-weight: 600;">
             <option value="">All Categories</option>

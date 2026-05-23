@@ -3,19 +3,26 @@ import { D1Database, Fetcher } from "@cloudflare/workers-types";
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
+  SEND_EMAIL: any; // Cloudflare Email Sending Beta
   ADMIN_TOKEN?: string;
+  APP_URL?: string;
 }
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
+    // Auth Routes
+    if (url.pathname.startsWith("/auth/")) {
+      return handleAuthRequest(request, env, url);
+    }
+
     // API Routes
     if (url.pathname.startsWith("/api/")) {
       return handleApiRequest(request, env, url);
     }
 
-    // Temporary Import Route (Protected by ADMIN_TOKEN)
+    // Admin Routes
     if (url.pathname === "/admin/import-marc") {
       const authHeader = request.headers.get("Authorization");
       if (env.ADMIN_TOKEN && authHeader !== `Bearer ${env.ADMIN_TOKEN}`) {
@@ -24,10 +31,83 @@ export default {
       return handleMarcImport(env);
     }
 
-    // Serve static assets from the public/ directory
+    // Serve static assets
     return env.ASSETS.fetch(request);
   },
 };
+
+async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<Response> {
+  const method = request.method;
+  const path = url.pathname.replace("/auth/", "");
+
+  if (method === "POST" && path === "login") {
+    const { email } = await request.json() as { email: string };
+    if (!email) return jsonResponse({ error: "Email required" }, 400);
+
+    const token = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+    await env.DB.prepare("INSERT INTO auth_tokens (token, email, expires_at) VALUES (?, ?, ?)")
+      .bind(token, email, expiresAt).run();
+
+    const loginUrl = `${env.APP_URL || url.origin}/auth/verify?token=${token}`;
+
+    if (env.SEND_EMAIL) {
+      try {
+        await env.SEND_EMAIL.send({
+          to: [{ email }],
+          from: { email: "auth@jojomap.kcmo.xyz", name: "Jojo's KC Bike Map" },
+          subject: "Your Magic Login Link",
+          content: [
+            { type: "text/plain", value: `Click here to login: ${loginUrl}` },
+            { type: "text/html", value: `<p>Click here to login: <a href="${loginUrl}">${loginUrl}</a></p>` }
+          ]
+        });
+      } catch (err: any) {
+        console.error("Native Email Sending failed:", err.message);
+      }
+    } else {
+      console.log(`MAGIC LINK (No Email Binding): ${loginUrl}`);
+    }
+
+    return jsonResponse({ success: true, message: "Magic link sent" });
+  }
+
+  if (method === "GET" && path === "verify") {
+    const token = url.searchParams.get("token");
+    if (!token) return new Response("Missing token", { status: 400 });
+
+    const auth = await env.DB.prepare("SELECT * FROM auth_tokens WHERE token = ? AND expires_at > CURRENT_TIMESTAMP")
+      .bind(token).first() as { email: string } | null;
+
+    if (!auth) return new Response("Invalid or expired token", { status: 401 });
+
+    let user = await env.DB.prepare("SELECT * FROM users WHERE email = ?").bind(auth.email).first() as { id: string } | null;
+    if (!user) {
+      const userId = crypto.randomUUID();
+      await env.DB.prepare("INSERT INTO users (id, email, verified_at) VALUES (?, ?, CURRENT_TIMESTAMP)")
+        .bind(userId, auth.email).run();
+      user = { id: userId };
+    }
+
+    const sessionToken = crypto.randomUUID();
+    const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    await env.DB.prepare("INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), user.id, sessionToken, sessionExpires).run();
+
+    await env.DB.prepare("DELETE FROM auth_tokens WHERE token = ?").bind(token).run();
+
+    return new Response(null, {
+      status: 302,
+      headers: {
+        "Location": "/",
+        "Set-Cookie": `session=${sessionToken}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${30 * 24 * 60 * 60}`
+      }
+    });
+  }
+
+  return new Response("Not Found", { status: 404 });
+}
 
 async function handleMarcImport(env: Env): Promise<Response> {
   const MARC_URL = 'https://marc2.org/arcgis/rest/services/MetroGreen/FeatureServer/0/query?where=PhaseSimple=%27Existing%27&outFields=*&f=geojson';
@@ -35,34 +115,29 @@ async function handleMarcImport(env: Env): Promise<Response> {
   try {
     const resp = await fetch(MARC_URL);
     if (!resp.ok) return new Response("Failed to fetch MARC data", { status: 500 });
-    
     const data = await resp.json() as any;
     let count = 0;
 
     for (const feature of data.features) {
       const props = feature.properties;
       const geom = feature.geometry;
-      
-      const name = props.Name || 'Unnamed Trail Segment';
+      const name = props.Name || 'Unnamed Trail';
       const slug = 'marc-' + crypto.randomUUID();
-      const category = 'Official Regional Data';
-      const description = `Source: MARC Regional Trails. Jurisdiction: ${props.Jurisdiction || 'Unknown'}. Type: ${props.FacilityType || 'Unknown'}.`;
-
       const id = crypto.randomUUID();
+      
       await env.DB.prepare(`
         INSERT INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, slug, name, 'line', category, 'active', 'public', 'official', description, props.SurfaceType || 'Unknown').run();
+      `).bind(id, slug, name, 'line', 'Official Regional Data', 'active', 'public', 'official', 
+        `Jurisdiction: ${props.Jurisdiction || 'Unknown'}. Type: ${props.FacilityType || 'Unknown'}.`, 
+        props.SurfaceType || 'Unknown').run();
 
-      await env.DB.prepare(`
-        INSERT INTO feature_geometries (feature_id, public_geometry)
-        VALUES (?, ?)
-      `).bind(id, JSON.stringify(geom)).run();
+      await env.DB.prepare("INSERT INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
+        .bind(id, JSON.stringify(geom)).run();
       
       count++;
-      if (count > 300) break; // Increased limit
+      if (count >= 300) break;
     }
-
     return new Response(`Imported ${count} features`, { status: 200 });
   } catch (err: any) {
     return new Response(`Error: ${err.message}`, { status: 500 });
@@ -73,198 +148,111 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
   const method = request.method;
   const path = url.pathname.replace("/api/", "");
 
-  const authHeader = request.headers.get("Authorization");
-  const isAdmin = env.ADMIN_TOKEN && authHeader === `Bearer ${env.ADMIN_TOKEN}`;
-
-  // Basic Auth for mutations
-  if (method !== "GET" && !isAdmin) {
-    return jsonResponse({ error: "Unauthorized" }, 401);
+  const cookieHeader = request.headers.get("Cookie") || "";
+  const sessionToken = cookieHeader.match(/session=([^;]+)/)?.[1];
+  
+  let user: { id: string, email: string, role: string } | null = null;
+  if (sessionToken) {
+    user = await env.DB.prepare(`
+      SELECT u.* FROM users u 
+      JOIN sessions s ON u.id = s.user_id 
+      WHERE s.token = ? AND s.expires_at > CURRENT_TIMESTAMP
+    `).bind(sessionToken).first() as any;
   }
 
-  try {
-    if (method === "GET" && path === "features") {
-      const { results } = await env.DB.prepare(`
-        SELECT f.*, g.public_geometry, g.admin_geometry
-        FROM features f
-        LEFT JOIN feature_geometries g ON f.id = g.feature_id
-        WHERE f.visibility != 'private' OR ? = 1
-      `).bind(isAdmin ? 1 : 0).all();
-      
-      const features = results.map(f => {
-        const isSensitive = f.visibility === 'sensitive';
-        // Use admin geometry if admin and available, otherwise public
-        let geometry = f.public_geometry;
-        if (isAdmin && f.admin_geometry) {
-          geometry = f.admin_geometry;
-        }
+  const authHeader = request.headers.get("Authorization");
+  const isAdmin = (env.ADMIN_TOKEN && authHeader === `Bearer ${env.ADMIN_TOKEN}`) || (user && user.role === 'admin');
 
-        return {
-          ...f,
-          // Remove admin_geometry from public output
-          admin_geometry: isAdmin ? f.admin_geometry : undefined,
-          geometry: geometry ? JSON.parse(geometry as string) : null,
-          // Hide admin note from public
-          admin_note: isAdmin ? f.admin_note : undefined
-        };
-      });
-      
-      return jsonResponse(features);
+  if (method !== "GET" && !user && !isAdmin) {
+    return jsonResponse({ error: "Authentication required" }, 401);
+  }
+
+  if (method === "GET" && path === "me") {
+    if (!user) return jsonResponse({ authenticated: false }, 401);
+    return jsonResponse({ authenticated: true, user });
+  }
+
+  if (method === "GET" && path === "amenities") {
+    const bbox = url.searchParams.get("bbox");
+    if (!bbox) return jsonResponse({ error: "BBOX required" }, 400);
+    
+    const [s, w, n, e] = bbox.split(",");
+    const query = `[out:json][timeout:25];(node["amenity"~"drinking_water|bicycle_repair_station"](${s},${w},${n},${e});node["service:bicycle:repair"="yes"](${s},${w},${n},${e});node["shop"="bicycle"](${s},${w},${n},${e}););out body;`;
+    
+    const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+    const resp = await fetch(overpassUrl, {
+      headers: { "User-Agent": "JojoKCBikeMap/1.0" }
+    });
+    
+    if (!resp.ok) {
+      const text = await resp.text();
+      return new Response(text, { status: resp.status });
+    }
+    
+    return jsonResponse(await resp.json());
+  }
+
+  if (method === "GET" && path === "features") {
+    const { results } = await env.DB.prepare(`
+      SELECT f.*, g.public_geometry, g.admin_geometry
+      FROM features f
+      LEFT JOIN feature_geometries g ON f.id = g.feature_id
+      WHERE f.visibility != 'private' OR ? = 1
+    `).bind(isAdmin ? 1 : 0).all();
+    
+    return jsonResponse(results.map(f => ({
+      ...f,
+      admin_geometry: isAdmin ? f.admin_geometry : undefined,
+      geometry: (isAdmin && f.admin_geometry) ? JSON.parse(f.admin_geometry as string) : (f.public_geometry ? JSON.parse(f.public_geometry as string) : null),
+      admin_note: isAdmin ? f.admin_note : undefined
+    })));
+  }
+
+  if (method === "POST" && path === "features") {
+    const body = await request.json() as any;
+    const id = crypto.randomUUID();
+    const slug = body.slug || body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const deleteToken = (user || isAdmin) ? null : (body.poster_email ? crypto.randomUUID() : null);
+
+    await env.DB.prepare(`
+      INSERT INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note, longevity, poster_email, delete_token, owner_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(id, slug, body.name, body.feature_type, body.category, body.status, 
+      body.visibility || 'public', body.officiality || 'official', body.public_description, body.surface_note,
+      body.longevity || 'permanent', body.poster_email, deleteToken, user?.id || null).run();
+
+    if (body.geometry) {
+      const field = body.visibility === 'sensitive' ? 'admin_geometry' : 'public_geometry';
+      await env.DB.prepare(`INSERT INTO feature_geometries (feature_id, ${field}) VALUES (?, ?)`).bind(id, JSON.stringify(body.geometry)).run();
     }
 
-    if (method === "POST" && path === "features") {
-      const body = await request.json() as any;
-      const id = crypto.randomUUID();
-      const slug = body.slug || body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      const deleteToken = body.poster_email ? crypto.randomUUID() : null;
+    return jsonResponse({ id, delete_token: deleteToken, success: true });
+  }
 
-      await env.DB.prepare(`
-        INSERT INTO features (
-          id, slug, name, feature_type, category, status, visibility, officiality, 
-          public_description, admin_note, surface_note, risk_note, weather_sensitivity, source_confidence,
-          longevity, poster_email, delete_token
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        id, slug, body.name, body.feature_type, body.category, body.status, 
-        body.visibility || 'public', body.officiality || 'official',
-        body.public_description, body.admin_note, body.surface_note, 
-        body.risk_note, body.weather_sensitivity, body.source_confidence,
-        body.longevity || 'permanent', body.poster_email, deleteToken
-      ).run();
+  if (method === "DELETE" && path.startsWith("features/")) {
+    const id = path.replace("features/", "");
+    const token = url.searchParams.get("token");
 
-      if (body.geometry) {
-        const geomField = body.visibility === 'sensitive' ? 'admin_geometry' : 'public_geometry';
-        await env.DB.prepare(
-          `INSERT INTO feature_geometries (feature_id, ${geomField}) VALUES (?, ?)`
-        ).bind(id, JSON.stringify(body.geometry)).run();
-        
-        // If sensitive, also provide a placeholder public geometry if not provided
-        if (body.visibility === 'sensitive' && body.public_geometry) {
-          await env.DB.prepare(
-            "UPDATE feature_geometries SET public_geometry = ? WHERE feature_id = ?"
-          ).bind(JSON.stringify(body.public_geometry), id).run();
-        }
-      }
-
-      // Create initial revision
-      const revisionId = crypto.randomUUID();
-      await env.DB.prepare(`
-        INSERT INTO feature_revisions (id, feature_id, actor, new_state)
-        VALUES (?, ?, ?, ?)
-      `).bind(revisionId, id, "admin", JSON.stringify(body)).run();
-
-      return jsonResponse({ id, delete_token: deleteToken, success: true });
-    }
-
-    if (method === "PUT" && path.startsWith("features/")) {
-      const id = path.replace("features/", "");
-      const body = await request.json() as any;
-
-      const current = await env.DB.prepare("SELECT * FROM features WHERE id = ?").bind(id).first();
-      if (!current) return jsonResponse({ error: "Feature not found" }, 404);
-
-      await env.DB.prepare(`
-        UPDATE features SET 
-          name = ?, feature_type = ?, category = ?, status = ?, visibility = ?, officiality = ?, 
-          public_description = ?, admin_note = ?, surface_note = ?, risk_note = ?, 
-          weather_sensitivity = ?, source_confidence = ?, longevity = ?, poster_email = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).bind(
-        body.name, body.feature_type, body.category, body.status, 
-        body.visibility || 'public', body.officiality || 'official',
-        body.public_description, body.admin_note, body.surface_note, 
-        body.risk_note, body.weather_sensitivity, body.source_confidence,
-        body.longevity || 'permanent', body.poster_email, id
-      ).run();
-
-      if (body.geometry) {
-        const isSensitive = body.visibility === 'sensitive';
-        if (isSensitive) {
-          await env.DB.prepare(
-            "UPDATE feature_geometries SET admin_geometry = ?, public_geometry = ? WHERE feature_id = ?"
-          ).bind(JSON.stringify(body.geometry), JSON.stringify(body.public_geometry || null), id).run();
-        } else {
-          await env.DB.prepare(
-            "UPDATE feature_geometries SET public_geometry = ?, admin_geometry = NULL WHERE feature_id = ?"
-          ).bind(JSON.stringify(body.geometry), id).run();
-        }
-      }
-
-      const revisionId = crypto.randomUUID();
-      await env.DB.prepare(`
-        INSERT INTO feature_revisions (id, feature_id, actor, previous_state, new_state)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(revisionId, id, "admin", JSON.stringify(current), JSON.stringify(body)).run();
-
+    if (isAdmin) {
+      await env.DB.prepare("DELETE FROM features WHERE id = ?").bind(id).run();
       return jsonResponse({ success: true });
     }
 
-    if (method === "DELETE" && path.startsWith("features/")) {
-      const id = path.replace("features/", "");
-      const token = url.searchParams.get("token");
-
-      if (isAdmin) {
-        await env.DB.prepare("DELETE FROM features WHERE id = ?").bind(id).run();
-        return jsonResponse({ success: true });
-      }
-
-      if (token) {
-        const feature = await env.DB.prepare("SELECT delete_token FROM features WHERE id = ?").bind(id).first();
-        if (feature && feature.delete_token === token) {
-          await env.DB.prepare("DELETE FROM features WHERE id = ?").bind(id).run();
-          return jsonResponse({ success: true });
-        }
-      }
-
-      return jsonResponse({ error: "Unauthorized" }, 401);
+    const feature = await env.DB.prepare("SELECT delete_token, owner_id FROM features WHERE id = ?").bind(id).first() as any;
+    if (feature && ((token && feature.delete_token === token) || (user && feature.owner_id === user.id))) {
+      await env.DB.prepare("DELETE FROM features WHERE id = ?").bind(id).run();
+      return jsonResponse({ success: true });
     }
 
-    if (method === "GET" && path.includes("/revisions")) {
-      const featureId = path.split("/")[1];
-      const { results } = await env.DB.prepare(`
-        SELECT * FROM feature_revisions WHERE feature_id = ? ORDER BY created_at DESC
-      `).bind(featureId).all();
-      return jsonResponse(results);
-    }
-
-    if (method === "GET" && path === "search") {
-      const q = url.searchParams.get("q") || "";
-      const { results } = await env.DB.prepare(`
-        SELECT * FROM features 
-        WHERE (name LIKE ? OR category LIKE ? OR status LIKE ? OR public_description LIKE ?)
-        AND (visibility != 'private' OR ? = 1)
-      `).bind(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, isAdmin ? 1 : 0).all();
-      return jsonResponse(results);
-    }
-
-    if (method === "GET" && path === "reports") {
-      const { results } = await env.DB.prepare("SELECT * FROM reports").all();
-      return jsonResponse(results);
-    }
-
-    if (method === "POST" && path === "reports") {
-      const body = await request.json() as any;
-      const id = crypto.randomUUID();
-      const deleteToken = body.poster_email ? crypto.randomUUID() : null;
-
-      await env.DB.prepare(
-        "INSERT INTO reports (id, feature_id, report_type, description, longevity, poster_email, delete_token) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      ).bind(id, body.feature_id, body.report_type, body.description, body.longevity || 'temporary', body.poster_email, deleteToken).run();
-      
-      return jsonResponse({ id, delete_token: deleteToken, success: true });
-    }
-
-    return new Response("API Route Not Found", { status: 404 });
-  } catch (error: any) {
-    return jsonResponse({ error: error.message }, 500);
+    return jsonResponse({ error: "Unauthorized" }, 401);
   }
+
+  return new Response("Not Found", { status: 404 });
 }
 
 function jsonResponse(data: any, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*"
-    },
+    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
   });
 }

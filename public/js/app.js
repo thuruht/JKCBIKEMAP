@@ -1,12 +1,15 @@
 import { fetchFeatures, createFeature, updateFeature } from './api.js';
-import { initLeafletMap, renderMap, flyToFeature, enableMapPicker, toggleLayer } from './map.js';
+import { initLeafletMap, renderMap, flyToFeature, enableMapPicker, toggleLayer, fetchAmenities, map } from './map.js';
 import { updateInfoCard, renderLegend, initThemeToggle, openModal, closeModal, openHelpModal, closeHelpModal, switchTab } from './ui.js';
 import { downloadGeoJSON } from './utils.js';
 
 const infoCard = document.getElementById('infoCard');
 const legendStack = document.getElementById('legendStack');
 const searchInput = document.getElementById('searchInput');
-const loginBtn = document.getElementById('loginBtn');
+const submitLoginBtn = document.getElementById('submitLoginBtn');
+const adminTokenInput = document.getElementById('adminTokenInput');
+const loginView = document.getElementById('login-view');
+const logoutBtn = document.getElementById('logoutBtn');
 const helpBtn = document.getElementById('helpBtn');
 const quickReportBtn = document.getElementById('quickReportBtn');
 const adminActions = document.getElementById('adminActions');
@@ -67,19 +70,39 @@ async function init() {
     renderLegend(filtered, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isAdmin)));
   });
 
-  loginBtn.addEventListener('click', () => {
+  const updateAdminUI = () => {
     if (isAdmin) {
-      localStorage.removeItem('ADMIN_TOKEN');
-      isAdmin = false;
+      if (loginView) loginView.style.display = 'none';
+      if (adminActions) adminActions.style.display = 'block';
+      if (logoutBtn) logoutBtn.style.display = 'block';
     } else {
-      const token = prompt('Enter Admin Token:');
+      if (loginView) loginView.style.display = 'block';
+      if (adminActions) adminActions.style.display = 'none';
+      if (logoutBtn) logoutBtn.style.display = 'none';
+    }
+    // Re-render to update edit buttons
+    refreshData();
+  };
+
+  if (submitLoginBtn) {
+    submitLoginBtn.addEventListener('click', () => {
+      const token = adminTokenInput.value;
       if (token) {
         localStorage.setItem('ADMIN_TOKEN', token);
         isAdmin = true;
+        adminTokenInput.value = '';
+        updateAdminUI();
       }
-    }
-    updateAdminUI();
-  });
+    });
+  }
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+      localStorage.removeItem('ADMIN_TOKEN');
+      isAdmin = false;
+      updateAdminUI();
+    });
+  }
 
   exportGeoJsonBtn.addEventListener('click', () => {
     downloadGeoJSON(allFeatures);
@@ -147,7 +170,47 @@ async function init() {
     toggleLayer('reports', e.target.checked);
   });
 
+  const amenitiesToggle = document.getElementById('layer-amenities');
+  if (amenitiesToggle) {
+    amenitiesToggle.addEventListener('change', (e) => {
+      toggleLayer('amenities', e.target.checked);
+      if (e.target.checked) fetchAmenities();
+    });
+  }
+
+  if (map) {
+    map.on('moveend', () => {
+      if (amenitiesToggle && amenitiesToggle.checked) fetchAmenities();
+    });
+  }
+
+  // Initialize Crypt Animations
+  initCryptAnimations();
+
   pickOnMapBtn.addEventListener('click', () => {
+...
+function initCryptAnimations() {
+  const scanline = document.querySelector('.crypt-scan');
+  const grid = document.querySelector('.crypt-grid');
+  
+  if (scanline) {
+    gsap.fromTo(scanline, 
+      { y: "-100%" }, 
+      { y: "100vh", duration: 8, ease: "none", repeat: -1 }
+    );
+  }
+  
+  if (grid) {
+    gsap.to(grid, {
+      opacity: 0.1,
+      duration: 4,
+      repeat: -1,
+      yoyo: true,
+      ease: "sine.inOut"
+    });
+  }
+}
+
     const type = document.getElementById('f_type').value;
     const geomField = document.getElementById('f_geometry');
     

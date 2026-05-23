@@ -9,8 +9,15 @@ const categorySelect = document.getElementById('f_category');
 
 export function updateInfoCard(f, infoCardElement, isAdmin = false) {
   const content = document.getElementById('infoCardContent');
-  infoCardElement.style.display = 'block';
   
+  if (infoCardElement.style.display === 'none' || !infoCardElement.style.display) {
+    infoCardElement.style.display = 'block';
+    gsap.fromTo(infoCardElement, 
+      { x: 50, opacity: 0 }, 
+      { x: 0, opacity: 1, duration: 0.4, ease: "power2.out" }
+    );
+  }
+
   const statusColor = f.status === 'active' ? '#10b981' : f.status === 'caution' ? '#f59e0b' : '#ef4444';
   
   content.innerHTML = `
@@ -76,6 +83,10 @@ export function switchTab(tabId) {
     if (t === tabId) {
       btn.classList.add('active');
       panel.style.display = 'block';
+      gsap.fromTo(panel, 
+        { opacity: 0, y: 10 }, 
+        { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }
+      );
     } else {
       btn.classList.remove('active');
       panel.style.display = 'none';
@@ -117,7 +128,7 @@ export function openModal(f = null, type = 'point') {
     document.getElementById('f_longevity').value = 'temporary';
     document.getElementById('f_poster_email').value = '';
     document.getElementById('f_geometry').value = type === 'point' 
-    ...
+      ? '{"type":"Point","coordinates":[0,0]}' 
       : '{"type":"LineString","coordinates":[[0,0],[0,0]]}';
   }
 }
@@ -170,6 +181,12 @@ export function renderLegend(features, containerElement, onFeatureJump) {
       });
       featureTiles.appendChild(tile);
     });
+
+    // GSAP stagger animation for tiles
+    gsap.fromTo(featureTiles.children, 
+      { scale: 0.9, opacity: 0 }, 
+      { scale: 1, opacity: 1, duration: 0.3, stagger: 0.02, ease: "back.out(1.4)" }
+    );
   };
 
   categorySelect.onchange = (e) => renderTiles(e.target.value);

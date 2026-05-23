@@ -7,5 +7,6 @@ export const categoryMeta = {
   'Ped bridges / sidewalks': {swatch:'#c026d3', copy:'Barrier-crossing links over interstates, rail, or hard edges.'},
   'Planned / in progress': {swatch:'#ef4444', copy:'Watch-list projects that may become useful before official completion.'},
   'Surface / connector notes': {swatch:'#8f8a80', copy:'Street stitches and condition-sensitive connectors.'},
-  'Official Regional Data': {swatch:'#3b82f6', copy:'Official MARC regional trails and bikeways data.'}
+  'Official Regional Data': {swatch:'#3b82f6', copy:'Official MARC regional trails and bikeways data.'},
+  'Rider Amenities': {swatch:'#0ea5e9', copy:'Water fountains and bike repair stations from OpenStreetMap.'}
 };

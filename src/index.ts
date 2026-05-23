@@ -60,7 +60,7 @@ async function handleMarcImport(env: Env): Promise<Response> {
       `).bind(id, JSON.stringify(geom)).run();
       
       count++;
-      if (count > 100) break; // Limit for now to prevent timeout in free worker
+      if (count > 300) break; // Increased limit
     }
 
     return new Response(`Imported ${count} features`, { status: 200 });
@@ -244,10 +244,13 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     if (method === "POST" && path === "reports") {
       const body = await request.json() as any;
       const id = crypto.randomUUID();
+      const deleteToken = body.poster_email ? crypto.randomUUID() : null;
+
       await env.DB.prepare(
-        "INSERT INTO reports (id, feature_id, report_type, description) VALUES (?, ?, ?, ?)"
-      ).bind(id, body.feature_id, body.report_type, body.description).run();
-      return jsonResponse({ id, success: true });
+        "INSERT INTO reports (id, feature_id, report_type, description, longevity, poster_email, delete_token) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).bind(id, body.feature_id, body.report_type, body.description, body.longevity || 'temporary', body.poster_email, deleteToken).run();
+      
+      return jsonResponse({ id, delete_token: deleteToken, success: true });
     }
 
     return new Response("API Route Not Found", { status: 404 });

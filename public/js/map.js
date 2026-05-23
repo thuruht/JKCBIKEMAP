@@ -4,24 +4,61 @@ export let map;
 let layers = {
   intel: L.layerGroup(),
   official: L.layerGroup(),
-  reports: L.layerGroup()
+  reports: L.layerGroup(),
+  amenities: L.layerGroup()
 };
 
 export function initLeafletMap(elementId, center, zoom) {
   map = L.map(elementId).setView(center, zoom);
   
-  // High-performance, rider-friendly tiles (Stadia Maps - Alidade Smooth)
-  L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
+  // CartoDB Voyager - Clear, high-performance, and no immediate API key requirement
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     maxZoom: 20,
-    attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
   }).addTo(map);
   
   // Add layers to map
   layers.intel.addTo(map);
   layers.official.addTo(map);
   layers.reports.addTo(map);
+  layers.amenities.addTo(map);
   
   return map;
+}
+
+export async function fetchAmenities() {
+  const bounds = map.getBounds();
+  const query = `
+    [out:json][timeout:25];
+    (
+      node["amenity"="drinking_water"](${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()});
+      node["service:bicycle:repair"="yes"](${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()});
+      node["amenity"="bicycle_repair_station"](${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()});
+    );
+    out body;
+  `;
+  
+  try {
+    const resp = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+    const data = await resp.json();
+    layers.amenities.clearLayers();
+    
+    data.elements.forEach(el => {
+      const f = {
+        name: el.tags.name || (el.tags.amenity === 'drinking_water' ? 'Water Fountain' : 'Repair Station'),
+        category: 'Rider Amenities',
+        status: 'active',
+        officiality: 'official',
+        public_description: el.tags.description || `OSM ID: ${el.id}`,
+        feature_type: 'point'
+      };
+      
+      const marker = L.marker([el.lat, el.lon], { icon: iconFor(f) }).addTo(layers.amenities);
+      marker.bindPopup(createPopupContent(f));
+    });
+  } catch (err) {
+    console.error('Failed to fetch amenities:', err);
+  }
 }
 
 export function toggleLayer(layerId, visible) {
@@ -63,7 +100,6 @@ export function renderMap(features, allFeaturesCount, onFeatureClick) {
         icon: iconFor(f),
         opacity: opacity
       }).addTo(targetGroup);
-      marker.bindPopup(createPopupContent(f));
       marker.on('click', () => onFeatureClick(f));
       f._layer = marker;
       allBounds.push(coords);
@@ -77,7 +113,6 @@ export function renderMap(features, allFeaturesCount, onFeatureClick) {
         opacity: .92,
         dashArray: isPlanned ? '10 8' : null
       }).addTo(targetGroup);
-      poly.bindPopup(createPopupContent(f));
       poly.on('click', () => onFeatureClick(f));
       f._layer = poly;
       coords.forEach(c => allBounds.push(c));

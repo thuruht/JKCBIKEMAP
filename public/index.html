@@ -9,8 +9,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
   <link rel="stylesheet" href="/styles/main.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
 </head>
 <body>
+  <div class="crypt-grid"></div>
+  <div class="crypt-scan"></div>
   <a class="sr-only" href="#map">Skip to map</a>
   <main class="app">
     <aside class="sidebar">
@@ -58,6 +61,10 @@
               <input type="checkbox" id="layer-reports" checked>
               <span class="summary-label">Field Reports & Alerts</span>
             </label>
+            <label class="layer-toggle">
+              <input type="checkbox" id="layer-amenities">
+              <span class="summary-label">Rider Amenities (OSM)</span>
+            </label>
           </div>
 
           <h2>Navigate</h2>
@@ -77,11 +84,21 @@
 
       <div id="panel-admin" style="display: none;">
         <section class="panel">
-          <h2>Manage</h2>
-          <button id="loginBtn" class="jump-btn" style="text-align: center; width: 100%;">Login as Admin</button>
+          <h2>Authentication</h2>
           
-          <div id="adminActions" style="display: none; margin-top: var(--space-4);" class="panel">
-            <p style="font-size: var(--text-xs); color: var(--color-primary); font-weight: 700; text-transform: uppercase; margin-bottom: var(--space-2);">Admin Tools</p>
+          <div id="login-view">
+            <p class="lede" style="margin-bottom: var(--space-4);">Access rider intel management tools.</p>
+            <div class="field">
+              <input type="password" id="adminTokenInput" class="jump-btn" style="width: 100%; background: var(--color-bg); padding: var(--space-3);" placeholder="Enter Admin Token">
+            </div>
+            <button id="submitLoginBtn" class="jump-btn" style="width: 100%; text-align: center; background: var(--color-primary); color: white; margin-top: var(--space-3); font-weight: 600;">Verify Access</button>
+          </div>
+
+          <div id="adminActions" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4);">
+              <p style="font-size: var(--text-xs); color: var(--color-primary); font-weight: 700; text-transform: uppercase;">Admin Tools</p>
+              <button id="logoutBtn" class="jump-btn" style="width: auto; padding: 2px 8px; font-size: 10px; background: var(--color-surface-offset);">Logout</button>
+            </div>
             <div style="display: flex; gap: var(--space-2);">
               <button id="addPointBtn" class="jump-btn" style="flex: 1; text-align: center; background: var(--color-surface);">+ Point</button>
               <button id="addLineBtn" class="jump-btn" style="flex: 1; text-align: center; background: var(--color-surface);">+ Line</button>

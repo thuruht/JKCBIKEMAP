@@ -79,7 +79,10 @@ Then enter this token when prompted by the "Login as Admin" button in the app.
 
 - **Corridor-based mapping:** Focuses on rider intelligence and connections.
 - **Dynamic API:** Fetches features, search results, and reports from D1.
-- **Revision History:** Every edit is tracked in the `feature_revisions` table.
+- **"Crypt" Aesthetic:** GSAP-animated grid and UI polish for a high-fidelity feel.
+- **Enhanced Reporting:** Dual-longevity system with 48-hour decay for temporary alerts.
+- **Regional Integration:** Built-in pipeline for MARC Regional Trails and OSM Amenities.
+- **Secure Self-Management:** Unique tokens allow community members to delete their own reports.
 - **Sensitivity Policy:** Support for public-safe vs. admin-only geometry and descriptions.
 - **Local Search:** Filter features by name, category, or description.
 

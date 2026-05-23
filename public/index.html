@@ -181,6 +181,8 @@
             </div>
             <button id="importMarcBtn" class="jump-btn" style="width: 100%; text-align: center; background: var(--color-primary-soft); margin-top: var(--space-2);">Run MARC Import</button>
             <button id="exportGeoJsonBtn" class="jump-btn" style="width: 100%; text-align: center; background: var(--color-surface); margin-top: var(--space-2);">Export GeoJSON</button>
+            <button id="importGeoJsonBtn" class="jump-btn" style="width: 100%; text-align: center; background: var(--color-surface); margin-top: var(--space-2);">Import GeoJSON</button>
+            <input type="file" id="geoJsonFileInput" accept=".geojson,.json" style="display:none;" />
           </div>
         </section>
       </div>
@@ -288,9 +290,43 @@
           <textarea id="f_description" rows="3" class="jump-btn" style="width: 100%; background: var(--color-bg); font-family: inherit;"></textarea>
         </div>
 
-        <div class="field">
-          <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Surface Note</label>
-          <input type="text" id="f_surface_note" class="jump-btn" style="width: 100%; background: var(--color-bg);">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
+          <div class="field">
+            <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Surface Note</label>
+            <input type="text" id="f_surface_note" class="jump-btn" style="width: 100%; background: var(--color-bg);">
+          </div>
+          <div class="field">
+            <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Risk Note (Cops/Dogs/Gaps)</label>
+            <input type="text" id="f_risk_note" class="jump-btn" style="width: 100%; background: var(--color-bg);">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
+          <div class="field">
+            <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Weather Sensitivity</label>
+            <select id="f_weather" class="jump-btn" style="width: 100%; background: var(--color-bg);">
+              <option value="none">None</option>
+              <option value="muddy">Muddy when wet</option>
+              <option value="floods">Prone to flooding</option>
+              <option value="icy">Icy in winter</option>
+              <option value="exposed">High wind exposure</option>
+            </select>
+          </div>
+          <div class="field">
+            <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Source Confidence</label>
+            <select id="f_confidence" class="jump-btn" style="width: 100%; background: var(--color-bg);">
+              <option value="high">High (Verified personally)</option>
+              <option value="medium">Medium (Reliable report)</option>
+              <option value="low">Low (Rumor / Satellite only)</option>
+              <option value="planned">Planned (Official PDF)</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="sourceLinksSection" style="padding: var(--space-3); background: var(--color-surface-offset); border-radius: var(--radius-md); border: 1px dashed var(--color-border);">
+          <label style="display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 8px;">Source Links</label>
+          <div id="sourceLinksList" style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px;"></div>
+          <button type="button" id="addSourceLinkBtn" class="jump-btn" style="font-size: 10px; width: auto; background: var(--color-bg);">+ Add Source URL</button>
         </div>
 
         <div class="field">

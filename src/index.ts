@@ -279,15 +279,23 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     const deleteToken = (user || isAdmin) ? null : (body.poster_email ? crypto.randomUUID() : null);
 
     await env.DB.prepare(`
-      INSERT INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note, longevity, poster_email, delete_token, owner_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note, risk_note, weather_sensitivity, source_confidence, longevity, poster_email, delete_token, owner_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(id, slug, body.name, body.feature_type, body.category, body.status, 
       body.visibility || 'public', body.officiality || 'official', body.public_description, body.surface_note,
+      body.risk_note, body.weather_sensitivity, body.source_confidence,
       body.longevity || 'permanent', body.poster_email, deleteToken, user?.id || null).run();
 
     if (body.geometry) {
       const field = body.visibility === 'sensitive' ? 'admin_geometry' : 'public_geometry';
       await env.DB.prepare(`INSERT INTO feature_geometries (feature_id, ${field}) VALUES (?, ?)`).bind(id, JSON.stringify(body.geometry)).run();
+    }
+
+    if (body.sources && Array.isArray(body.sources)) {
+      for (const s of body.sources) {
+        await env.DB.prepare("INSERT INTO feature_sources (id, feature_id, source_url, source_note) VALUES (?, ?, ?, ?)")
+          .bind(crypto.randomUUID(), id, s.url, s.note).run();
+      }
     }
 
     // Reward points and badges
@@ -299,6 +307,97 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     }
 
     return jsonResponse({ id, delete_token: deleteToken, success: true });
+  }
+
+  if (method === "PUT" && path.startsWith("features/")) {
+    const id = path.replace("features/", "");
+    if (!isAdmin) return jsonResponse({ error: "Unauthorized" }, 403);
+    
+    const body = await request.json() as any;
+    
+    // 1. Fetch current state for revision
+    const oldState = await env.DB.prepare(`
+      SELECT f.*, g.public_geometry, g.admin_geometry 
+      FROM features f LEFT JOIN feature_geometries g ON f.id = g.feature_id 
+      WHERE f.id = ?
+    `).bind(id).first() as any;
+
+    if (!oldState) return jsonResponse({ error: "Feature not found" }, 404);
+
+    // 2. Save revision
+    await env.DB.prepare(`
+      INSERT INTO feature_revisions (id, feature_id, actor, changed_fields, previous_state, new_state) 
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(
+      crypto.randomUUID(), 
+      id, 
+      user?.email || 'admin', 
+      '[]',
+      JSON.stringify(oldState), 
+      JSON.stringify(body)
+    ).run();
+
+    // 3. Update feature
+    const slug = body.slug || body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    await env.DB.prepare(`
+      UPDATE features SET 
+        slug = ?, name = ?, feature_type = ?, category = ?, status = ?, 
+        visibility = ?, officiality = ?, public_description = ?, surface_note = ?, 
+        risk_note = ?, weather_sensitivity = ?, source_confidence = ?,
+        longevity = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).bind(
+      slug, body.name, body.feature_type, body.category, body.status,
+      body.visibility || 'public', body.officiality || 'official', body.public_description, body.surface_note,
+      body.risk_note, body.weather_sensitivity, body.source_confidence,
+      body.longevity || 'permanent', id
+    ).run();
+
+    // 4. Update geometry
+    if (body.geometry) {
+      const field = body.visibility === 'sensitive' ? 'admin_geometry' : 'public_geometry';
+      const nullField = body.visibility === 'sensitive' ? 'public_geometry' : 'admin_geometry';
+      await env.DB.prepare(`
+        UPDATE feature_geometries 
+        SET ${field} = ?, ${nullField} = NULL 
+        WHERE feature_id = ?
+      `).bind(JSON.stringify(body.geometry), id).run();
+    }
+
+    // 5. Update sources
+    if (body.sources && Array.isArray(body.sources)) {
+      await env.DB.prepare("DELETE FROM feature_sources WHERE feature_id = ?").bind(id).run();
+      for (const s of body.sources) {
+        await env.DB.prepare("INSERT INTO feature_sources (id, feature_id, source_url, source_note) VALUES (?, ?, ?, ?)")
+          .bind(crypto.randomUUID(), id, s.url, s.note).run();
+      }
+    }
+
+    return jsonResponse({ success: true });
+  }
+
+  if (method === "GET" && path.match(/^features\/([^\/]+)\/details$/)) {
+    const id = path.split("/")[1];
+    const { results: comments } = await env.DB.prepare("SELECT * FROM comments WHERE feature_id = ? ORDER BY created_at DESC").bind(id).all();
+    const { results: reports } = await env.DB.prepare("SELECT * FROM reports WHERE feature_id = ? ORDER BY created_at DESC").bind(id).all();
+    const { results: sources } = await env.DB.prepare("SELECT * FROM feature_sources WHERE feature_id = ?").bind(id).all();
+    return jsonResponse({ comments: comments || [], reports: reports || [], sources: sources || [] });
+  }
+
+  if (method === "POST" && path.match(/^features\/([^\/]+)\/comments$/)) {
+    if (!user) return jsonResponse({ error: "Authentication required" }, 401);
+    const id = path.split("/")[1];
+    const body = await request.json() as { body: string };
+    const commentId = crypto.randomUUID();
+    
+    await env.DB.prepare(
+      "INSERT INTO comments (id, feature_id, user_id, author_name, body) VALUES (?, ?, ?, ?, ?)"
+    ).bind(commentId, id, user.id, user.email.split('@')[0], body.body).run();
+
+    // Small rep bump for commenting
+    await env.DB.prepare("UPDATE users SET reputation_score = reputation_score + 1 WHERE id = ?").bind(user.id).run();
+
+    return jsonResponse({ success: true, id: commentId });
   }
 
   if (method === "POST" && path === "reports") {
@@ -326,6 +425,9 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     const id = crypto.randomUUID();
     await env.DB.prepare("INSERT INTO checkpoints (id, contributor_id, feature_id, check_in_type) VALUES (?, ?, ?, ?)")
       .bind(id, user.id, body.feature_id, body.type || 'passage').run();
+
+    // Update feature verification date
+    await env.DB.prepare("UPDATE features SET last_verified_at = CURRENT_TIMESTAMP WHERE id = ?").bind(body.feature_id).run();
 
     // Reward points
     await env.DB.prepare("UPDATE users SET reputation_score = reputation_score + 2 WHERE id = ?").bind(user.id).run();

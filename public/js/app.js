@@ -290,6 +290,63 @@ async function init() {
     });
   }
 
+  const importGeoJsonBtn = document.getElementById('importGeoJsonBtn');
+  const geoJsonFileInput = document.getElementById('geoJsonFileInput');
+
+  if (importGeoJsonBtn && geoJsonFileInput) {
+    importGeoJsonBtn.addEventListener('click', () => geoJsonFileInput.click());
+    geoJsonFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const geojson = JSON.parse(event.target.result);
+          if (!geojson.features || !Array.isArray(geojson.features)) throw new Error("Invalid GeoJSON: missing features array.");
+          
+          const token = localStorage.getItem('ADMIN_TOKEN');
+          let count = 0;
+          importGeoJsonBtn.disabled = true;
+          importGeoJsonBtn.textContent = 'Importing...';
+          
+          for (const feat of geojson.features) {
+            const geom = feat.geometry;
+            const props = feat.properties || {};
+            if (!geom) continue;
+            
+            const data = {
+              name: props.name || 'Imported Feature',
+              feature_type: geom.type === 'Point' ? 'point' : 'line',
+              category: props.category || 'Trail spines',
+              status: props.status || 'active',
+              officiality: props.officiality || 'official',
+              visibility: props.visibility || 'public',
+              public_description: props.public_description || props.description || '',
+              surface_note: props.surface_note || '',
+              geometry: geom
+            };
+            
+            try {
+              await createFeature(data, token);
+              count++;
+            } catch (err) {
+              console.warn("Failed to import feature:", data.name, err);
+            }
+          }
+          alert(`Successfully imported ${count} features.`);
+          await refreshData();
+        } catch (err) {
+          alert("Error parsing GeoJSON: " + err.message);
+        } finally {
+          importGeoJsonBtn.disabled = false;
+          importGeoJsonBtn.textContent = 'Import GeoJSON';
+          geoJsonFileInput.value = '';
+        }
+      };
+      reader.readAsText(file);
+    });
+  }
+
   if (importMarcBtn) {
     importMarcBtn.addEventListener('click', async () => {
       if (!confirm('This will fetch and import the latest MARC data. Continue?')) return;
@@ -446,9 +503,16 @@ async function init() {
         visibility: document.getElementById('f_visibility').value,
         public_description: document.getElementById('f_description').value,
         surface_note: document.getElementById('f_surface_note').value,
+        risk_note: document.getElementById('f_risk_note').value,
+        weather_sensitivity: document.getElementById('f_weather').value,
+        source_confidence: document.getElementById('f_confidence').value,
         longevity: document.getElementById('f_longevity').value,
         poster_email: document.getElementById('f_poster_email').value,
-        geometry: JSON.parse(document.getElementById('f_geometry').value)
+        geometry: JSON.parse(document.getElementById('f_geometry').value),
+        sources: Array.from(document.querySelectorAll('.source-link-row')).map(row => ({
+          url: row.querySelector('.source-url').value,
+          note: row.querySelector('.source-note').value
+        })).filter(s => s.url)
       };
 
       try {

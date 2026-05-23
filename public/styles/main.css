@@ -6,9 +6,9 @@
   --text-xl: clamp(2rem, 1.8rem + 2vw, 3rem);
   --space-1: 0.35rem; --space-2: 0.65rem; --space-3: 1rem; --space-4: 1.25rem;
   --space-5: 1.5rem; --space-6: 2rem; --space-8: 2.5rem; --space-10: 3.5rem; --space-12: 4.5rem;
-  --color-bg:#f7f6f2ff; --color-surface:#f9f8f5ff; --color-surface-2:#fbfbf9ff; --color-surface-offset:#edeae5ff;
-  --color-border:#a3a099ff; --color-text:#1a1914ff; --color-text-muted:#42403bff; --color-text-faint:#5c5a54ff;
-  --color-primary:#01696fff; --color-primary-soft:#d7ece9ff; --color-card:#f9f8f5f2;
+  --color-bg:rgb(155, 142, 93); --color-surface:rgb(173, 165, 141); --color-surface-2:rgb(141, 141, 137); --color-surface-offset:#edeae5ff;
+  --color-border:rgb(95, 76, 32); --color-text:rgb(37, 32, 5); --color-text-muted:#42403bff; --color-text-faint:rgb(61, 57, 46);
+  --color-primary:#01696fff; --color-primary-soft:rgb(126, 160, 122); --color-card:#f9f8f5f2;
   --shadow-sm:0 2px 4px #1a19141f; --shadow-md:0 16px 48px #1a19142e;
   --radius-md:1rem; --radius-lg:1.5rem; --radius-full:999px;
   --font-display:'Instrument Serif', Georgia, serif; --font-body:'Work Sans', Arial, sans-serif;
@@ -125,7 +125,7 @@ h1{font-family:var(--font-display);font-size:var(--text-xl);line-height:1.05;let
 
 .tile-btn.active {
   background: var(--color-primary);
-  color: white;
+  color: rgb(255, 196, 196);
   border-color: var(--color-primary);
   box-shadow: var(--shadow-sm);
 }
@@ -140,7 +140,7 @@ h1{font-family:var(--font-display);font-size:var(--text-xl);line-height:1.05;let
 }
 
 .tile-btn:hover small {
-  color: white;
+  color: rgb(255, 196, 196);
 }
 
 .search-result-item {

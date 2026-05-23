@@ -35,8 +35,16 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
       </div>
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3);">
         <h3 style="margin: 0; line-height: 1.1; flex: 1;">${catIcon} ${f.name}</h3>
-        <div style="width: 14px; height: 14px; border-radius: 999px; background: ${statusColor}; border: 3px solid white; box-shadow: 0 0 0 1px ${statusColor}; flex: none; margin-top: 4px;"></div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+          <div style="width: 14px; height: 14px; border-radius: 999px; background: ${statusColor}; border: 3px solid white; box-shadow: 0 0 0 1px ${statusColor}; flex: none;"></div>
+          ${f.visibility === 'sensitive' ? '<span title="Sensitive: Use discretion" style="font-size: 14px; cursor: help;">🤫</span>' : ''}
+        </div>
       </div>
+    </div>
+
+    <div style="display: flex; gap: 4px; margin-bottom: var(--space-4);">
+      <span style="font-size: 9px; font-weight: 700; color: var(--color-text-faint); background: var(--color-surface-offset); padding: 2px 6px; border-radius: 4px; text-transform: uppercase;">Confidence: ${f.source_confidence || 'medium'}</span>
+      ${f.last_verified_at ? `<span style="font-size: 9px; font-weight: 700; color: var(--color-primary); background: var(--color-primary-soft); padding: 2px 6px; border-radius: 4px; text-transform: uppercase;">Verified ${new Date(f.last_verified_at).toLocaleDateString()}</span>` : ''}
     </div>
 
     <div style="font-size: var(--text-base); line-height: 1.5; color: var(--color-text); margin-bottom: var(--space-5); font-weight: 500;">
@@ -60,16 +68,88 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
     </div>
 
     ${f.surface_note ? `<p class="note"><strong>Rider Surface Note:</strong> ${f.surface_note}</p>` : ''}
+    ${f.risk_note ? `<p class="note" style="border-left-color: #ef4444ff;"><strong>⚠️ Rider Risk Note:</strong> ${f.risk_note}</p>` : ''}
+    ${f.weather_sensitivity && f.weather_sensitivity !== 'none' ? `<p class="note" style="border-left-color: #3b82f6ff;"><strong>🌧️ Weather Note:</strong> ${f.weather_sensitivity}</p>` : ''}
     
     ${f.admin_note ? `<div style="background: var(--color-primary-soft); padding: var(--space-3); border-radius: var(--radius-md); margin-top: var(--space-4); border: 1px solid var(--color-primary);">
       <div style="font-size: 10px; color: var(--color-primary); text-transform: uppercase; font-weight: 800; margin-bottom: 4px; letter-spacing: 0.05em;">Admin Internal Note</div>
       <div style="font-size: 13px; line-height: 1.4; font-weight: 500;">${f.admin_note}</div>
     </div>` : ''}
+
+    <div id="featureDetailsAsync" style="margin-top: var(--space-4); border-top: 1px solid var(--color-border); padding-top: var(--space-4);">
+      <div style="font-size: 10px; opacity: 0.5;">Loading community intel...</div>
+    </div>
   `;
 
   const checkInBtn = document.getElementById('checkInBtn');
   const hasSession = document.cookie.includes('session=');
   
+  if (f.id && !f.id.startsWith('marc-')) {
+    fetch(`/api/features/${f.id}/details`)
+      .then(r => r.ok ? r.json() : { comments: [], reports: [], sources: [] })
+      .then(data => {
+        const detailsDiv = document.getElementById('featureDetailsAsync');
+        if (!detailsDiv) return;
+
+        let html = '';
+        
+        if (data.sources && data.sources.length > 0) {
+           html += `<div style="margin-bottom: 10px;"><strong style="font-size: 12px; color: var(--color-primary);">Verified Sources</strong></div>`;
+           html += data.sources.map(s => `<div class="note" style="margin-bottom: 8px;">🔗 <a href="${s.source_url}" target="_blank" style="color: var(--color-primary);">${s.source_note || 'External Link'}</a> <br><small>Confidence: ${s.confidence || 'unknown'}</small></div>`).join('');
+        }
+
+        if (data.reports && data.reports.length > 0) {
+           html += `<div style="margin-bottom: 10px;"><strong style="font-size: 12px; color: var(--color-primary);">Field Reports</strong></div>`;
+           html += data.reports.map(r => `<div class="note" style="margin-bottom: 8px;"><strong>${r.report_type}:</strong> ${r.description} <br><small>${new Date(r.created_at).toLocaleDateString()}</small></div>`).join('');
+        }
+        
+        html += `<div style="margin-bottom: 10px; margin-top: 15px;"><strong style="font-size: 12px; color: var(--color-primary);">Community Discussion</strong></div>`;
+        if (data.comments && data.comments.length > 0) {
+           html += data.comments.map(c => `<div class="note" style="margin-bottom: 8px;"><strong>${c.author_name}</strong>: ${c.body} <br><small>${new Date(c.created_at).toLocaleDateString()}</small></div>`).join('');
+        } else {
+           html += `<div style="font-size: 11px; opacity: 0.7; margin-bottom: 10px;">No comments yet.</div>`;
+        }
+        
+        if (hasSession) {
+          html += `
+            <div style="margin-top:10px; display: flex; gap: 8px;">
+              <input type="text" id="newCommentInput" placeholder="Add a comment..." style="flex: 1; padding: 6px; font-size: 12px; background: var(--color-surface-offset); border: 1px solid var(--color-border); color: var(--color-text);">
+              <button id="submitCommentBtn" class="jump-btn" style="padding: 6px 12px;">Post</button>
+            </div>
+          `;
+        } else {
+          html += `<div style="font-size: 11px; opacity: 0.7; font-style: italic;">Log in to join the discussion.</div>`;
+        }
+
+        detailsDiv.innerHTML = html;
+
+        if (hasSession) {
+          const subBtn = document.getElementById('submitCommentBtn');
+          if (subBtn) {
+            subBtn.addEventListener('click', async () => {
+               const val = document.getElementById('newCommentInput').value;
+               if (!val) return;
+               subBtn.disabled = true;
+               subBtn.textContent = '...';
+               await fetch(`/api/features/${f.id}/comments`, {
+                 method: 'POST', 
+                 headers: {'Content-Type':'application/json'},
+                 body: JSON.stringify({body: val})
+               });
+               updateInfoCard(f, infoCardElement, isAdmin);
+            });
+          }
+        }
+      })
+      .catch(e => {
+        const detailsDiv = document.getElementById('featureDetailsAsync');
+        if (detailsDiv) detailsDiv.innerHTML = '<div style="font-size:10px; color:red;">Failed to load intel.</div>';
+      });
+  } else if (f.id && f.id.startsWith('marc-')) {
+    const detailsDiv = document.getElementById('featureDetailsAsync');
+    if (detailsDiv) detailsDiv.style.display = 'none';
+  }
+
   if (hasSession && checkInBtn) {
     checkInBtn.style.display = 'block';
     checkInBtn.onclick = async () => {
@@ -161,10 +241,22 @@ export function openModal(f = null, type = 'point') {
     document.getElementById('f_visibility').value = f.visibility || 'public';
     document.getElementById('f_description').value = f.public_description || '';
     document.getElementById('f_surface_note').value = f.surface_note || '';
+    document.getElementById('f_risk_note').value = f.risk_note || '';
+    document.getElementById('f_weather').value = f.weather_sensitivity || 'none';
+    document.getElementById('f_confidence').value = f.source_confidence || 'medium';
     document.getElementById('f_longevity').value = f.longevity || 'temporary';
     document.getElementById('f_poster_email').value = f.poster_email || '';
     document.getElementById('f_geometry').value = JSON.stringify(f.geometry);
-    } else {
+    
+    // Load sources
+    const sourceList = document.getElementById('sourceLinksList');
+    sourceList.innerHTML = '';
+    fetch(`/api/features/${f.id}/details`)
+      .then(r => r.json())
+      .then(data => {
+        data.sources.forEach(s => addSourceLinkRow(s.source_url, s.source_note));
+      });
+  } else {
     document.getElementById('modalTitle').textContent = `Add ${type === 'point' ? 'Point' : 'Line'}`;
     document.getElementById('f_id').value = '';
     document.getElementById('f_type').value = type;
@@ -172,10 +264,32 @@ export function openModal(f = null, type = 'point') {
     document.getElementById('f_type').value = type;
     document.getElementById('f_longevity').value = 'temporary';
     document.getElementById('f_poster_email').value = '';
+    document.getElementById('f_weather').value = 'none';
+    document.getElementById('f_confidence').value = 'medium';
     document.getElementById('f_geometry').value = type === 'point' 
       ? '{"type":"Point","coordinates":[0,0]}' 
       : '{"type":"LineString","coordinates":[[0,0],[0,0]]}';
+    document.getElementById('sourceLinksList').innerHTML = '';
   }
+
+  // Handle source link adding
+  const addSourceBtn = document.getElementById('addSourceLinkBtn');
+  addSourceBtn.onclick = () => addSourceLinkRow();
+}
+
+function addSourceLinkRow(url = '', note = '') {
+  const container = document.getElementById('sourceLinksList');
+  const div = document.createElement('div');
+  div.className = 'source-link-row';
+  div.style.display = 'flex';
+  div.style.gap = '4px';
+  div.style.marginBottom = '4px';
+  div.innerHTML = `
+    <input type="text" class="source-url jump-btn" style="flex: 2; font-size: 10px;" placeholder="URL" value="${url}">
+    <input type="text" class="source-note jump-btn" style="flex: 1; font-size: 10px;" placeholder="Label" value="${note}">
+    <button type="button" class="jump-btn" style="width: auto; padding: 2px 6px; color: red;" onclick="this.parentElement.remove()">×</button>
+  `;
+  container.appendChild(div);
 }
 
 export function closeModal() {

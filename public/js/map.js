@@ -159,7 +159,6 @@ export function renderMap(features, allFeaturesCount, onFeatureClick, onMarkerDr
       const poly = L.polyline(coords, {
         color: meta.swatch,
         weight: f.category === 'Official Regional Data' ? 3 : 5,
-        opacity: .92,
         dashArray: isPlanned ? '10 8' : null
       }).addTo(targetGroup);
       poly.on('click', () => onFeatureClick(f));

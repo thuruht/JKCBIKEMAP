@@ -4,10 +4,13 @@ A production-ready web app for Kansas City metro bike mapping, centered on real 
 
 ## Tech Stack
 
-- **Frontend:** Static HTML/JS with Leaflet (served by Cloudflare Workers)
+- **Frontend:** Static HTML/JS with Leaflet (served via Cloudflare Workers Assets)
+- **Animations:** GSAP (locally hosted)
 - **API:** Cloudflare Workers (TypeScript)
 - **Database:** Cloudflare D1 (Relational SQL)
-- **Deployment:** Cloudflare Workers + D1
+- **Storage:** Cloudflare KV (User preferences)
+- **Authentication:** Cloudflare Workers Email Sending (Native Beta)
+- **Deployment:** Cloudflare Workers + D1 + KV
 
 ## Getting Started
 
@@ -88,11 +91,14 @@ Then enter this token when prompted by the "Login as Admin" button in the app.
 
 ## Data Model
 
-The app uses a normalized schema:
-- `features`: Core metadata and current state.
-- `feature_geometries`: GeoJSON geometries (public and admin).
-- `feature_revisions`: Immutable history of edits.
-- `reports`: User-submitted field reports.
+The app uses a hardened, production-ready schema:
+- `features`: Core metadata, current state, longevity, and ownership.
+- `feature_geometries`: Separated GeoJSON geometries (public and sensitive).
+- `feature_revisions`: Immutable history of every edit.
+- `reports`: Community condition reports with 48-hour decay logic.
+- `users`: Verified identities via Magic Link.
+- `sessions`: Secure HttpOnly session management.
+- `auth_tokens`: Single-use verification tokens.
 
 ## License
 

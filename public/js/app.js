@@ -180,7 +180,7 @@ async function init() {
           body: JSON.stringify({ email })
         });
         await resp.json();
-        alert('Check your email! (SendGrid API Key required for actual delivery)');
+        alert('Verification link sent! Please check your inbox (and spam folder) for your secure magic link.');
       } catch (err) {
         alert('Failed to send link: ' + err.message);
       } finally {

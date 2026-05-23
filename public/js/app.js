@@ -1,5 +1,5 @@
 import { fetchFeatures, createFeature, updateFeature } from './api.js';
-import { initLeafletMap, renderMap, flyToFeature, enableMapPicker, toggleLayer, fetchAmenities, map, switchBasemap } from './map.js';
+import { initLeafletMap, renderMap, flyToFeature, enableMapPicker, toggleLayer, fetchAmenities, map, switchBasemap, toggleOverlay } from './map.js';
 import { updateInfoCard, renderLegend, initThemeToggle, openModal, closeModal, openHelpModal, closeHelpModal, switchTab } from './ui.js';
 import { downloadGeoJSON } from './utils.js';
 
@@ -316,6 +316,12 @@ async function init() {
   if (intelToggle) intelToggle.addEventListener('change', (e) => toggleLayer('intel', e.target.checked));
   if (officialToggle) officialToggle.addEventListener('change', (e) => toggleLayer('official', e.target.checked));
   if (reportsToggle) reportsToggle.addEventListener('change', (e) => toggleLayer('reports', e.target.checked));
+
+  // Overlay Toggles
+  ['railway', 'cycling_routes', 'hiking_trails'].forEach(id => {
+    const el = document.getElementById(`overlay-${id}`);
+    if (el) el.addEventListener('change', (e) => toggleOverlay(id, e.target.checked));
+  });
 
   const basemapSelect = document.getElementById('basemapSelect');
   if (basemapSelect) {

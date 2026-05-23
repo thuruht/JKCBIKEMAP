@@ -35,7 +35,7 @@ export default {
     // Serve static assets with CSP
     const response = await env.ASSETS.fetch(request);
     const newHeaders = new Headers(response.headers);
-    newHeaders.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org https://*.vis.earthdata.nasa.gov https://*.arcgisonline.com https://*.tile-cyclosm.openstreetmap.fr; connect-src 'self' https://overpass-api.de;");
+    newHeaders.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org https://*.vis.earthdata.nasa.gov https://*.arcgisonline.com https://*.tile-cyclosm.openstreetmap.fr https://mt1.google.com https://*.tile.thunderforest.com https://*.tile.openstreetmap.fr https://tile.osm.ch https://tile.memomaps.de https://*.tiles.openrailwaymap.org https://tile.waymarkedtrails.org; connect-src 'self' https://overpass-api.de;");
     
     return new Response(response.body, {
       status: response.status,

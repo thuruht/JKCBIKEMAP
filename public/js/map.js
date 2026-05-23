@@ -5,36 +5,64 @@ let isAdmin = !!localStorage.getItem('ADMIN_TOKEN');
 let currentBasemap;
 
 const basemaps = {
+  // DARK & NIGHT
   dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-    subdomains: 'abcd',
-    maxZoom: 20
-  }),
-  voyager: L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-    subdomains: 'abcd',
-    maxZoom: 20
-  }),
-  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: '&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community',
-    maxZoom: 19
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO', subdomains: 'abcd', maxZoom: 20
   }),
   night: L.tileLayer('https://map1.vis.earthdata.nasa.gov/wmts-webmerc/VIIRS_CityLights_2012/default/{time}/{tilematrixset}{maxZoom}/{z}/{y}/{x}.{format}', {
-    attribution: '&copy; NASA',
-    bounds: [[-85.0511287776, -179.999999975], [85.0511287776, 179.999999975]],
-    minZoom: 1,
-    maxZoom: 8,
-    format: 'jpg',
-    time: '',
-    tilematrixset: 'GoogleMapsCompatible_Level'
+    attribution: '&copy; NASA', bounds: [[-85.0511287776, -179.999999975], [85.0511287776, 179.999999975]], minZoom: 1, maxZoom: 8, format: 'jpg', time: '', tilematrixset: 'GoogleMapsCompatible_Level'
   }),
-  cyclosm: L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors &copy; CyclOSM',
-    maxZoom: 20
+  esri_dark: L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; Esri', maxZoom: 16
   }),
+  // SATELLITE
+  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community', maxZoom: 19
+  }),
+  google_sat: L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+    attribution: '&copy; Google', maxZoom: 20
+  }),
+  google_hybrid: L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+    attribution: '&copy; Google', maxZoom: 20
+  }),
+  usgs_imagery: L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; USGS', maxZoom: 16
+  }),
+  // STREETS
+  voyager: L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO', subdomains: 'abcd', maxZoom: 20
+  }),
+  osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+  }),
+  osm_fr: L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap &copy; OSM France', subdomains: ['a', 'b', 'c']
+  }),
+  osm_ch: L.tileLayer('https://tile.osm.ch/switzerland/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap &copy; Swiss OSM'
+  }),
+  public_transport: L.tileLayer('https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap &copy; MeMoMaps', maxZoom: 18
+  }),
+  // TOPO
   terrain: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-    attribution: 'Map data: &copy; OSM contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)',
-    maxZoom: 17
+    attribution: 'Map data: &copy; OSM contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)', maxZoom: 17
+  }),
+  esri_topo: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; Esri &copy; OpenStreetMap', maxZoom: 19
+  }),
+  usgs_topo: L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; USGS &copy; OpenStreetMap', maxZoom: 16
+  }),
+  // OUTDOOR
+  cyclosm: L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors &copy; CyclOSM', maxZoom: 20
+  }),
+  pioneer: L.tileLayer('https://{s}.tile.thunderforest.com/pioneer/{z}/{x}/{y}.png?apikey=6170aad10dfd42a38d4d8c709a536f38', {
+    attribution: '&copy; Thunderforest &copy; OSM', subdomains: 'abc', maxZoom: 22
+  }),
+  outdoors: L.tileLayer('https://{s}.tile.thunderforest.com/outdoors/{z}/{x}/{y}.png?apikey=6170aad10dfd42a38d4d8c709a536f38', {
+    attribution: '&copy; Thunderforest &copy; OSM', subdomains: 'abc', maxZoom: 22
   })
 };
 
@@ -42,7 +70,17 @@ let layers = {
   intel: L.layerGroup(),
   official: L.layerGroup(),
   reports: L.layerGroup(),
-  amenities: L.layerGroup()
+  amenities: L.layerGroup(),
+  // OVERLAYS
+  railway: L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenRailwayMap', maxZoom: 19, transparent: true, opacity: 0.7
+  }),
+  cycling_routes: L.tileLayer('https://tile.waymarkedtrails.org/cycling/{z}/{x}/{y}.png', {
+    attribution: '&copy; Waymarked Trails', maxZoom: 18, transparent: true, opacity: 0.8
+  }),
+  hiking_trails: L.tileLayer('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', {
+    attribution: '&copy; Waymarked Trails', maxZoom: 18, transparent: true, opacity: 0.8
+  })
 };
 
 export function initLeafletMap(elementId, center, zoom) {
@@ -66,6 +104,16 @@ export function switchBasemap(id) {
     map.removeLayer(currentBasemap);
     currentBasemap = basemaps[id];
     currentBasemap.addTo(map);
+  }
+}
+
+export function toggleOverlay(id, visible) {
+  if (layers[id]) {
+    if (visible) {
+      layers[id].addTo(map);
+    } else {
+      map.removeLayer(layers[id]);
+    }
   }
 }
 
@@ -125,7 +173,9 @@ export function toggleLayer(layerId, visible) {
 }
 
 export function renderMap(features, allFeaturesCount, onFeatureClick, onMarkerDrag) {
-  Object.values(layers).forEach(group => group.clearLayers());
+  Object.values(layers).forEach(group => {
+    if (!(group instanceof L.TileLayer)) group.clearLayers();
+  });
   const allBounds = [];
 
   features.forEach(f => {

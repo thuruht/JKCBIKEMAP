@@ -20,33 +20,50 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
 
   const statusColor = f.status === 'active' ? '#10b981ff' : f.status === 'caution' ? '#f59e0bff' : '#ef4444ff';
   
+  // Category-based icon shorthand for accessibility
+  const catIcon = f.category === 'Pedestrian or walking bridges' ? '🌉' : 
+                  f.category === 'Trail spines' ? '🌿' : 
+                  f.category === 'Field Reports' ? '⚠️' : 
+                  f.category === 'Rider Amenities' ? '⛲' : 
+                  f.category === 'Key parks' ? '🌳' : '📍';
+
   content.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; padding-right: 20px; gap: 8px;">
-      <h3 style="margin: 0; line-height: 1.2;">${f.name}</h3>
-      <div style="display: flex; gap: 4px; flex-shrink: 0;">
-        <span style="background: ${statusColor}; color: white; font-size: 9px; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; font-weight: 700;">${f.status}</span>
-        ${isAdmin ? `<button class="jump-btn" id="editFeatureBtn" style="padding: 2px 6px; font-size: 9px; margin: 0;">Edit</button>` : ''}
+    <div style="margin-bottom: var(--space-4);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+        <small>${f.category}</small>
+        ${isAdmin ? `<button class="jump-btn" id="editFeatureBtn" style="padding: 2px 8px; font-size: 10px; background: var(--color-surface-offset);">Edit Intelligence</button>` : ''}
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3);">
+        <h3 style="margin: 0; line-height: 1.1; flex: 1;">${catIcon} ${f.name}</h3>
+        <div style="width: 14px; height: 14px; border-radius: 999px; background: ${statusColor}; border: 3px solid white; box-shadow: 0 0 0 1px ${statusColor}; flex: none; margin-top: 4px;"></div>
       </div>
     </div>
-    <p style="margin: 8px 0; font-size: var(--text-sm); line-height: 1.4;">${f.public_description || 'No description available.'}</p>
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; border-top: 1px solid var(--color-border); padding-top: 8px;">
+
+    <div style="font-size: var(--text-base); line-height: 1.5; color: var(--color-text); margin-bottom: var(--space-5); font-weight: 500;">
+      ${f.public_description || 'No detailed intel provided yet.'}
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); border-top: 1px solid var(--color-border); padding-top: var(--space-4); margin-bottom: var(--space-4);">
       <div>
-        <div style="font-size: 9px; color: var(--color-text-faint); text-transform: uppercase; font-weight: 700;">Category</div>
-        <div style="font-size: 11px; font-weight: 500;">${f.category}</div>
+        <div style="font-size: 10px; color: var(--color-text-faint); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Current Status</div>
+        <div style="font-size: 14px; font-weight: 700; color: ${statusColor}; text-transform: capitalize;">${f.status}</div>
       </div>
       <div>
-        <div style="font-size: 9px; color: var(--color-text-faint); text-transform: uppercase; font-weight: 700;">Officiality</div>
-        <div style="font-size: 11px; font-weight: 500;">${f.officiality}</div>
+        <div style="font-size: 10px; color: var(--color-text-faint); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Officiality</div>
+        <div style="font-size: 14px; font-weight: 700;">${f.officiality}</div>
       </div>
     </div>
-    <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
-      <button class="jump-btn" id="checkInBtn" style="padding: 4px 10px; font-size: 10px; background: var(--color-primary); color: white; display: none;">Check-In Here</button>
-      ${f.poster_email ? `<button class="jump-btn" id="deleteFeatureBtn" style="padding: 4px 8px; font-size: 10px; background: #fee2e2; color: #991b1b; border-color: #fecaca;">Delete Report</button>` : ''}
+
+    <div style="display: flex; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-2);">
+      <button class="jump-btn" id="checkInBtn" style="padding: 8px 16px; font-size: 12px; font-weight: 700; background: var(--color-primary); color: white; border: none; display: none;">Check-In Here</button>
+      ${f.poster_email ? `<button class="jump-btn" id="deleteFeatureBtn" style="padding: 8px 12px; font-size: 11px; background: #fee2e2ff; color: #991b1bff; border: 1px solid #fecacaff; font-weight: 600;">Delete My Report</button>` : ''}
     </div>
-    ${f.surface_note ? `<p class="note" style="margin-top: 8px;"><strong>Surface:</strong> ${f.surface_note}</p>` : ''}
-    ${f.admin_note ? `<div style="background: var(--color-primary-soft); padding: 8px; border-radius: 6px; margin-top: 12px;">
-      <div style="font-size: 9px; color: var(--color-primary); text-transform: uppercase; font-weight: 700; margin-bottom: 4px;">Admin Note</div>
-      <div style="font-size: 11px; line-height: 1.4;">${f.admin_note}</div>
+
+    ${f.surface_note ? `<p class="note"><strong>Rider Surface Note:</strong> ${f.surface_note}</p>` : ''}
+    
+    ${f.admin_note ? `<div style="background: var(--color-primary-soft); padding: var(--space-3); border-radius: var(--radius-md); margin-top: var(--space-4); border: 1px solid var(--color-primary);">
+      <div style="font-size: 10px; color: var(--color-primary); text-transform: uppercase; font-weight: 800; margin-bottom: 4px; letter-spacing: 0.05em;">Admin Internal Note</div>
+      <div style="font-size: 13px; line-height: 1.4; font-weight: 500;">${f.admin_note}</div>
     </div>` : ''}
   `;
 

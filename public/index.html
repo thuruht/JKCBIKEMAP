@@ -28,7 +28,7 @@
           </svg>
           <div>
             <h1>JOJO's KC BIKE MAP</h1>
-            <p class="lede">Shortcuts, scenic routes, greenways, and rider knowledge.</p>
+            <p class="lede">Real routes for real riders. Shortcuts, trail alerts, and local secrets — always up to date.</p>
           </div>
         </div>
         <div style="display: flex; gap: var(--space-1);">
@@ -148,8 +148,8 @@
           </div>
 
           <h2>Navigate</h2>
-          <select id="categorySelect" class="jump-btn" style="width: 100%; padding: var(--space-2); font-weight: 600;">
-            <option value="">All Categories</option>
+          <select id="categorySelect" class="jump-btn" style="width: 100%; padding: var(--space-4); font-weight: 700; font-size: var(--text-base); background: var(--color-surface-offset);">
+            <option value="">All Intel Categories</option>
           </select>
           <div id="featureTiles" class="tiles-grid"></div>
         </section>
@@ -157,8 +157,9 @@
 
       <div id="panel-search" style="display: none;">
         <section class="panel">
-          <h2>Find Feature</h2>
-          <input type="text" id="searchInput" placeholder="Search map..." class="jump-btn" style="padding: var(--space-3); font-size: var(--text-sm);">
+          <h2>Find Location</h2>
+          <p style="font-size: 13px; color: var(--color-text-muted); margin-bottom: 12px; font-weight: 500;">Type a trail name, park, or a street address below.</p>
+          <input type="text" id="searchInput" placeholder="e.g. Rock Island or 31st & Main" class="jump-btn" style="padding: var(--space-4); font-size: var(--text-base); font-weight: 600;">
           <div id="searchResultsList" class="tiles-grid" style="margin-top: var(--space-4); max-height: 50vh; overflow-y: auto;"></div>
         </section>
       </div>

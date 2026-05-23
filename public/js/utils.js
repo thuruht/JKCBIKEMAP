@@ -7,12 +7,12 @@ export function getCategoryMeta(cat) {
 export function iconFor(f) {
   const meta = getCategoryMeta(f.category);
   const statusColor = f.status === 'active' ? '#ffffffff' : f.status === 'caution' ? '#f59e0bff' : '#ef4444ff';
-  const ringWidth = f.status === 'active' ? '2px' : '3px';
+  const ringWidth = f.status === 'active' ? '3px' : '4px';
   
   return L.divIcon({
     className: 'custom-marker',
-    html: `<div style="width:16px;height:16px;border-radius:999px;background:${meta.swatch};border:${ringWidth} solid ${statusColor};box-shadow:0 2px 8px rgba(0,0,0,.2)"></div>`,
-    iconSize: [16, 16], iconAnchor: [8, 8], popupAnchor: [0, -8]
+    html: `<div style="width:24px;height:24px;border-radius:999px;background:${meta.swatch};border:${ringWidth} solid ${statusColor};box-shadow:var(--shadow-md)"></div>`,
+    iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12]
   });
 }
 export function createPopupContent(f) {
@@ -22,16 +22,15 @@ export function createPopupContent(f) {
     .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[REDACTED EMAIL]');
 
   return `
-    <div style="font-family: var(--font-body); font-size: var(--text-sm);">
-      <strong style="font-family: var(--font-display); font-size: var(--text-base);">${f.name}</strong><br>
-      <div style="margin-top: 4px;">${safeDescription}</div>
-...
-      <hr style="margin: 8px 0; border: 0; border-top: 1px solid var(--color-border);">
-      <div style="font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.4;">
-        <strong>Status:</strong> ${f.status}<br>
-        <strong>Type:</strong> ${f.officiality}<br>
-        ${f.surface_note ? `<strong>Surface:</strong> ${f.surface_note}<br>` : ''}
-        ${f.last_verified_at ? `<strong>Verified:</strong> ${new Date(f.last_verified_at).toLocaleDateString()}` : ''}
+    <div style="font-family: var(--font-body); font-size: var(--text-sm); padding: 4px;">
+      <strong style="font-family: var(--font-display); font-size: var(--text-base); display: block; margin-bottom: 4px; line-height: 1.1;">${f.name}</strong>
+      <div style="line-height: 1.4; color: var(--color-text-muted);">${safeDescription}</div>
+      <hr style="margin: 12px 0; border: 0; border-top: 1px solid var(--color-border);">
+      <div style="font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.6;">
+        <span style="font-weight: 700; text-transform: uppercase; color: var(--color-primary);">Status:</span> ${f.status}<br>
+        <span style="font-weight: 700; text-transform: uppercase; color: var(--color-primary);">Type:</span> ${f.officiality}<br>
+        ${f.surface_note ? `<span style="font-weight: 700; text-transform: uppercase; color: var(--color-primary);">Surface:</span> ${f.surface_note}<br>` : ''}
+        ${f.last_verified_at ? `<span style="font-weight: 700; text-transform: uppercase; color: var(--color-primary);">Verified:</span> ${new Date(f.last_verified_at).toLocaleDateString()}` : ''}
       </div>
     </div>
   `;

@@ -251,4 +251,12 @@ export function initThemeToggle() {
     theme = theme === 'dark' ? 'light' : 'dark';
     root.setAttribute('data-theme', theme);
   });
+
+  // Global Escape key to close modals
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+      closeHelpModal();
+    }
+  });
 }

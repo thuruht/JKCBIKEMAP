@@ -125,11 +125,17 @@ async function handleMarcImport(env: Env): Promise<Response> {
   const MARC_URL = 'https://marc2.org/arcgis/rest/services/MetroGreen/FeatureServer/0/query?where=PhaseSimple=%27Existing%27&outFields=*&f=geojson';
   
   try {
+    console.log("Fetching MARC data from:", MARC_URL);
     const resp = await fetch(MARC_URL);
-    if (!resp.ok) return new Response("Failed to fetch MARC data", { status: 500 });
+    if (!resp.ok) return new Response(`Failed to fetch MARC data: ${resp.status}`, { status: 500 });
     const data = await resp.json() as any;
-    let count = 0;
+    
+    if (!data.features) {
+      console.error("MARC Data missing features array:", data);
+      return new Response("MARC Data missing features", { status: 500 });
+    }
 
+    let count = 0;
     for (const feature of data.features) {
       const props = feature.properties;
       const geom = feature.geometry;
@@ -137,22 +143,28 @@ async function handleMarcImport(env: Env): Promise<Response> {
       const slug = 'marc-' + crypto.randomUUID();
       const id = crypto.randomUUID();
       
-      await env.DB.prepare(`
-        INSERT INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, slug, name, 'line', 'Official Regional Data', 'active', 'public', 'official', 
-        `Jurisdiction: ${props.Jurisdiction || 'Unknown'}. Type: ${props.FacilityType || 'Unknown'}.`, 
-        props.SurfaceType || 'Unknown').run();
+      try {
+        await env.DB.prepare(`
+          INSERT OR IGNORE INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(id, slug, name, 'line', 'Official Regional Data', 'active', 'public', 'official', 
+          `Jurisdiction: ${props.Jurisdiction || 'Unknown'}. Type: ${props.FacilityType || 'Unknown'}.`, 
+          props.SurfaceType || 'Unknown').run();
 
-      await env.DB.prepare("INSERT INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
-        .bind(id, JSON.stringify(geom)).run();
-      
-      count++;
+        await env.DB.prepare("INSERT OR IGNORE INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
+          .bind(id, JSON.stringify(geom)).run();
+        
+        count++;
+      } catch (dbErr: any) {
+        console.error(`DB Error on feature ${name}:`, dbErr.message);
+      }
+
       if (count >= 300) break;
     }
     return new Response(`Imported ${count} features`, { status: 200 });
   } catch (err: any) {
-    return new Response(`Error: ${err.message}`, { status: 500 });
+    console.error("Critical Import Error:", err.message);
+    return new Response(`Critical Error: ${err.message}`, { status: 500 });
   }
 }
 

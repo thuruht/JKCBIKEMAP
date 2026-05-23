@@ -202,10 +202,10 @@ export function renderMap(features, allFeaturesCount, onFeatureClick, onMarkerDr
       const marker = L.marker(coords, { 
         icon: iconFor(f),
         opacity: opacity,
-        draggable: isAdminFlag && f.feature_type === 'point'
+        draggable: isAdminFlag && f.feature_type === 'point' && f.id
       }).addTo(targetGroup);
 
-      if (isAdminFlag && onMarkerDrag) {
+      if (isAdminFlag && f.id && onMarkerDrag) {
         marker.on('dragend', (e) => {
           const newPos = e.target.getLatLng();
           onMarkerDrag(f, [newPos.lng, newPos.lat]);

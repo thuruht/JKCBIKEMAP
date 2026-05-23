@@ -1,7 +1,7 @@
 import { fetchFeatures, createFeature, updateFeature } from './api.js';
-import { initLeafletMap, renderMap, flyToFeature, enableMapPicker, toggleLayer, fetchAmenities, map, switchBasemap, toggleOverlay } from './map.js';
+import { initLeafletMap, renderMap, flyToFeature, enableMapPicker, toggleLayer, fetchAmenities, map, switchBasemap, toggleOverlay, startLineDrawing } from './map.js';
 import { updateInfoCard, renderLegend, initThemeToggle, openModal, closeModal, openHelpModal, closeHelpModal, switchTab } from './ui.js';
-import { downloadGeoJSON } from './utils.js';
+import { downloadGeoJSON, getCategoryMeta } from './utils.js';
 
 // DOM Elements
 const infoCard = document.getElementById('infoCard');

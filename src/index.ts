@@ -179,9 +179,19 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
   if (method === "GET" && path === "me") {
     if (!user) return jsonResponse({ authenticated: false }, 401);
     const prefs = await env.KV.get(`prefs:${user.id}`);
+    
+    // Fetch level and badges
+    const userStats = await env.DB.prepare("SELECT reputation_score, contributor_level FROM users WHERE id = ?").bind(user.id).first() as any;
+    const { results: badges } = await env.DB.prepare(`
+      SELECT b.* FROM badges b 
+      JOIN user_badges ub ON b.id = ub.badge_id 
+      WHERE ub.user_id = ?
+    `).bind(user.id).all();
+
     return jsonResponse({ 
       authenticated: true, 
-      user, 
+      user: { ...user, ...userStats }, 
+      badges: badges || [],
       preferences: prefs ? JSON.parse(prefs) : {} 
     });
   }
@@ -245,6 +255,32 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     if (body.geometry) {
       const field = body.visibility === 'sensitive' ? 'admin_geometry' : 'public_geometry';
       await env.DB.prepare(`INSERT INTO feature_geometries (feature_id, ${field}) VALUES (?, ?)`).bind(id, JSON.stringify(body.geometry)).run();
+    }
+
+    // Reward points and badges
+    if (user) {
+      await env.DB.prepare("UPDATE users SET reputation_score = reputation_score + 10 WHERE id = ?").bind(user.id).run();
+      if (body.category === 'Ped bridges / sidewalks') {
+        await env.DB.prepare("INSERT OR IGNORE INTO user_badges (user_id, badge_id) VALUES (?, 'bridge-hunter')").bind(user.id, 'bridge-hunter').run();
+      }
+    }
+
+    return jsonResponse({ id, delete_token: deleteToken, success: true });
+  }
+
+  if (method === "POST" && path === "reports") {
+    const body = await request.json() as any;
+    const id = crypto.randomUUID();
+    const deleteToken = (user || isAdmin) ? null : (body.poster_email ? crypto.randomUUID() : null);
+
+    await env.DB.prepare(
+      "INSERT INTO reports (id, feature_id, report_type, description, longevity, poster_email, delete_token, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(id, body.feature_id, body.report_type, body.description, body.longevity || 'temporary', body.poster_email, deleteToken, user?.id || null).run();
+    
+    // Reward points and badges
+    if (user) {
+      await env.DB.prepare("UPDATE users SET reputation_score = reputation_score + 5 WHERE id = ?").bind(user.id).run();
+      await env.DB.prepare("INSERT OR IGNORE INTO user_badges (user_id, badge_id) VALUES (?, 'mud-finder')").bind(user.id, 'mud-finder').run();
     }
 
     return jsonResponse({ id, delete_token: deleteToken, success: true });

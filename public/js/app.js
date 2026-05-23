@@ -206,6 +206,37 @@ async function init() {
           if (userEmailDisplay) userEmailDisplay.textContent = data.user.email;
           isAdmin = isAdmin || data.user.role === 'admin';
           
+          // Apply gamification data
+          const levelEl = document.getElementById('contributor-level');
+          const xpEl = document.getElementById('contributor-xp');
+          const barEl = document.getElementById('xp-progress-bar');
+          const badgeGrid = document.getElementById('user-badges-grid');
+
+          if (data.user.reputation_score !== undefined) {
+            const score = data.user.reputation_score;
+            const level = Math.floor(score / 50) + 1;
+            const xpInLevel = score % 50;
+            const progress = (xpInLevel / 50) * 100;
+
+            const levelNames = ['SCOUT', 'PATHFINDER', 'EXPLORER', 'CHART-MASTER', 'INTEL-NODE', 'TRAIL-WIZARD', 'TERRAIN-GURU', 'MAP-VANGUARD', 'DATA-ELITE', 'LOCAL LEGEND'];
+            const levelName = levelNames[Math.min(level - 1, 9)];
+
+            if (levelEl) levelEl.textContent = `LEVEL ${level} ${levelName}`;
+            if (xpEl) xpEl.textContent = `${score} XP`;
+            if (barEl) barEl.style.width = `${progress}%`;
+
+            if (badgeGrid && data.badges) {
+              badgeGrid.innerHTML = '';
+              data.badges.forEach(b => {
+                const badge = document.createElement('div');
+                badge.style.cssText = 'padding: 2px 6px; border-radius: 4px; background: var(--color-primary-soft); color: var(--color-primary); font-size: 8px; font-weight: 700; text-transform: uppercase; border: 1px solid var(--color-primary);';
+                badge.textContent = b.name;
+                badge.title = b.description;
+                badgeGrid.appendChild(badge);
+              });
+            }
+          }
+
           // Apply saved basemap preference
           if (data.preferences && data.preferences.basemap) {
             switchBasemap(data.preferences.basemap);

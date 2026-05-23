@@ -108,16 +108,70 @@ async function init() {
   await refreshData();
   initCryptAnimations();
 
+  const searchResultsList = document.getElementById('searchResultsList');
+
+  let searchTimeout;
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
       const q = e.target.value.toLowerCase();
-      const filtered = allFeatures.filter(f =>
-        f.name.toLowerCase().includes(q) ||
-        (f.public_description && f.public_description.toLowerCase().includes(q)) ||
-        f.category.toLowerCase().includes(q)
-      );
-      renderMap(filtered, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag);
-      renderLegend(filtered, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isAdmin)));
+      if (!q) {
+        if (searchResultsList) searchResultsList.innerHTML = '';
+        renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag);
+        return;
+      }
+
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(async () => {
+        // 1. Filter Local Intel
+        const filtered = allFeatures.filter(f =>
+          f.name.toLowerCase().includes(q) ||
+          (f.public_description && f.public_description.toLowerCase().includes(q)) ||
+          f.category.toLowerCase().includes(q)
+        );
+
+        // 2. Clear and Render Sidebar List
+        if (searchResultsList) {
+          searchResultsList.innerHTML = '';
+          
+          // Render local matches first
+          filtered.forEach(f => {
+            const tile = document.createElement('div');
+            tile.className = 'tile-btn';
+            tile.style.borderLeft = `4px solid ${getCategoryMeta(f.category).swatch}`;
+            tile.innerHTML = `<div><strong>${f.name}</strong><br><small style="font-size:9px; opacity:0.7;">${f.category}</small></div>`;
+            tile.onclick = () => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isAdmin));
+            searchResultsList.appendChild(tile);
+          });
+
+          // 3. Fetch Nominatim Matches
+          try {
+            const nomResp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&viewbox=-95.1,39.3,-94.1,38.7&bounded=1`);
+            const nomData = await nomResp.json();
+            
+            if (nomData.length > 0) {
+              const divider = document.createElement('div');
+              divider.style.cssText = 'font-size:9px; text-transform:uppercase; font-weight:700; margin: 12px 0 4px; opacity:0.5;';
+              divider.textContent = 'Global Locations';
+              searchResultsList.appendChild(divider);
+
+              nomData.forEach(place => {
+                const tile = document.createElement('div');
+                tile.className = 'tile-btn';
+                tile.style.borderLeft = '4px solid #94a3b8ff'; // Neutral gray for global
+                tile.innerHTML = `<div><strong>${place.display_name.split(',')[0]}</strong><br><small style="font-size:9px; opacity:0.7;">${place.display_name.split(',').slice(1, 3).join(',')}</small></div>`;
+                tile.onclick = () => {
+                  map.flyTo([place.lat, place.lon], 15);
+                };
+                searchResultsList.appendChild(tile);
+              });
+            }
+          } catch (err) {
+            console.warn('Nominatim search failed:', err);
+          }
+        }
+
+        renderMap(filtered, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag);
+      }, 400);
     });
   }
 

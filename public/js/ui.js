@@ -39,7 +39,8 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
         <div style="font-size: 11px; font-weight: 500;">${f.officiality}</div>
       </div>
     </div>
-    <div style="margin-top: 12px; display: flex; gap: 8px;">
+    <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+      <button class="jump-btn" id="checkInBtn" style="padding: 4px 10px; font-size: 10px; background: var(--color-primary); color: white; display: none;">Check-In Here</button>
       ${f.poster_email ? `<button class="jump-btn" id="deleteFeatureBtn" style="padding: 4px 8px; font-size: 10px; background: #fee2e2; color: #991b1b; border-color: #fecaca;">Delete Report</button>` : ''}
     </div>
     ${f.surface_note ? `<p class="note" style="margin-top: 8px;"><strong>Surface:</strong> ${f.surface_note}</p>` : ''}
@@ -48,6 +49,33 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
       <div style="font-size: 11px; line-height: 1.4;">${f.admin_note}</div>
     </div>` : ''}
   `;
+
+  const checkInBtn = document.getElementById('checkInBtn');
+  const hasSession = document.cookie.includes('session=');
+  
+  if (hasSession && checkInBtn) {
+    checkInBtn.style.display = 'block';
+    checkInBtn.onclick = async () => {
+      try {
+        checkInBtn.disabled = true;
+        checkInBtn.textContent = 'Verifying...';
+        const resp = await fetch('/api/checkpoints', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feature_id: f.id, type: 'passage' })
+        });
+        if (!resp.ok) throw new Error('Check-in failed');
+        const res = await resp.json();
+        alert(`Verified! +2 XP earned. ${res.badge_unlocked ? `Unlocked Badge: ${res.badge_unlocked}!` : ''}`);
+        location.reload(); // Refresh to update levels/badges
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        checkInBtn.disabled = false;
+        checkInBtn.textContent = 'Check-In Here';
+      }
+    };
+  }
 
   if (isAdmin && document.getElementById('editFeatureBtn')) {
     document.getElementById('editFeatureBtn').onclick = () => openModal(f);

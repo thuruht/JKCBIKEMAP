@@ -4,7 +4,7 @@ export const categoryMeta = {
   'Neighborhoods': {swatch:'#6b5cffff', copy:'Mental-map neighborhoods and stepping-stone areas.'},
   'Boundary anchors': {swatch:'#111111ff', copy:'Your metro diamond and edge anchors.'},
   'Key parks': {swatch:'#2f855aff', copy:'Parks that matter because trails or connectors cluster around them.'},
-  'Ped bridges / sidewalks': {swatch:'#c026d3ff', copy:'Barrier-crossing links over interstates, rail, or hard edges.'},
+  'Pedestrian or walking bridges': {swatch:'#c026d3ff', copy:'Barrier-crossing links over interstates, rail, or hard edges.'},
   'Planned / in progress': {swatch:'#ef4444ff', copy:'Watch-list projects that may become useful before official completion.'},
   'Surface / connector notes': {swatch:'#8f8a80ff', copy:'Street stitches and condition-sensitive connectors.'},
   'Official Regional Data': {swatch:'#3b82f6ff', copy:'Official MARC regional trails and bikeways data.'},

@@ -224,6 +224,8 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
   }
 
   if (method === "GET" && path === "features") {
+    const isHighRep = isAdmin || (user && (user.reputation_score >= 50 || user.role === 'contributor'));
+
     const { results } = await env.DB.prepare(`
       SELECT f.*, g.public_geometry, g.admin_geometry
       FROM features f
@@ -231,12 +233,28 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       WHERE f.visibility != 'private' OR ? = 1
     `).bind(isAdmin ? 1 : 0).all();
     
-    return jsonResponse(results.map(f => ({
-      ...f,
-      admin_geometry: isAdmin ? f.admin_geometry : undefined,
-      geometry: (isAdmin && f.admin_geometry) ? JSON.parse(f.admin_geometry as string) : (f.public_geometry ? JSON.parse(f.public_geometry as string) : null),
-      admin_note: isAdmin ? f.admin_note : undefined
-    })));
+    return jsonResponse(results.map(f => {
+      const isSensitive = f.visibility === 'sensitive';
+      
+      // Access Control: Discretion logic
+      // Guests and Level 1 see generalized data for sensitive features
+      const hasFullAccess = isAdmin || isHighRep;
+      
+      let geometry = f.public_geometry;
+      if (hasFullAccess && f.admin_geometry) {
+        geometry = f.admin_geometry;
+      }
+
+      return {
+        ...f,
+        admin_geometry: isAdmin ? f.admin_geometry : undefined,
+        geometry: geometry ? JSON.parse(geometry as string) : null,
+        // Restrict sensitive metadata to high-rep users
+        public_description: (isSensitive && !hasFullAccess) ? "Detailed intelligence restricted to established contributors." : f.public_description,
+        admin_note: isAdmin ? f.admin_note : undefined,
+        surface_note: (isSensitive && !hasFullAccess) ? null : f.surface_note
+      };
+    }));
   }
 
   if (method === "POST" && path === "features") {
@@ -260,7 +278,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     // Reward points and badges
     if (user) {
       await env.DB.prepare("UPDATE users SET reputation_score = reputation_score + 10 WHERE id = ?").bind(user.id).run();
-      if (body.category === 'Ped bridges / sidewalks') {
+      if (body.category === 'Pedestrian or walking bridges') {
         await env.DB.prepare("INSERT OR IGNORE INTO user_badges (user_id, badge_id) VALUES (?, 'bridge-hunter')").bind(user.id, 'bridge-hunter').run();
       }
     }
@@ -276,7 +294,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     await env.DB.prepare(
       "INSERT INTO reports (id, feature_id, report_type, description, longevity, poster_email, delete_token, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(id, body.feature_id, body.report_type, body.description, body.longevity || 'temporary', body.poster_email, deleteToken, user?.id || null).run();
-    
+
     // Reward points and badges
     if (user) {
       await env.DB.prepare("UPDATE users SET reputation_score = reputation_score + 5 WHERE id = ?").bind(user.id).run();
@@ -286,6 +304,31 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     return jsonResponse({ id, delete_token: deleteToken, success: true });
   }
 
+  if (method === "POST" && path === "checkpoints") {
+    if (!user) return jsonResponse({ error: "Authentication required" }, 401);
+    const body = await request.json() as { feature_id: string, type: string };
+
+    const id = crypto.randomUUID();
+    await env.DB.prepare("INSERT INTO checkpoints (id, contributor_id, feature_id, check_in_type) VALUES (?, ?, ?, ?)")
+      .bind(id, user.id, body.feature_id, body.type || 'passage').run();
+
+    // Reward points
+    await env.DB.prepare("UPDATE users SET reputation_score = reputation_score + 2 WHERE id = ?").bind(user.id).run();
+
+    // Check for geography badges
+    let badgeUnlocked = null;
+    const feature = await env.DB.prepare("SELECT category FROM features WHERE id = ?").bind(body.feature_id).first() as any;
+
+    if (feature && feature.category === 'Pedestrian or walking bridges') {
+      const { count } = await env.DB.prepare("SELECT COUNT(*) as count FROM user_badges WHERE user_id = ? AND badge_id = 'river-crosser'").bind(user.id).first() as any;
+      if (count === 0) {
+        await env.DB.prepare("INSERT INTO user_badges (user_id, badge_id) VALUES (?, 'river-crosser')").bind(user.id, 'river-crosser').run();
+        badgeUnlocked = 'River Crosser';
+      }
+    }
+
+    return jsonResponse({ success: true, badge_unlocked: badgeUnlocked });
+  }
   if (method === "DELETE" && path.startsWith("features/")) {
     const id = path.replace("features/", "");
     const token = url.searchParams.get("token");

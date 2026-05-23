@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KC Mental Trail Map</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <style>
+    :root, [data-theme="light"] {
+      --text-xs: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);
+      --text-sm: clamp(0.875rem, 0.8rem + 0.35vw, 1rem);
+      --text-base: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+      --text-lg: clamp(1.125rem, 1rem + 0.75vw, 1.5rem);
+      --text-xl: clamp(1.5rem, 1.2rem + 1.25vw, 2.25rem);
+      --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+      --space-5: 1.25rem; --space-6: 1.5rem; --space-8: 2rem; --space-10: 2.5rem; --space-12: 3rem;
+      --color-bg:#f7f6f2; --color-surface:#f9f8f5; --color-surface-2:#fbfbf9; --color-surface-offset:#edeae5;
+      --color-border:#d4d1ca; --color-text:#28251d; --color-text-muted:#67655f; --color-text-faint:#96948d;
+      --color-primary:#01696f; --color-primary-soft:#d7ece9; --color-card:rgba(249,248,245,.88);
+      --shadow-sm:0 1px 2px rgba(40,37,29,.06); --shadow-md:0 12px 32px rgba(40,37,29,.12);
+      --radius-md:.85rem; --radius-lg:1.2rem; --radius-full:999px;
+      --font-display:'Instrument Serif', Georgia, serif; --font-body:'Work Sans', Arial, sans-serif;
+    }
+    [data-theme="dark"] {
+      --color-bg:#171614; --color-surface:#1c1b19; --color-surface-2:#201f1d; --color-surface-offset:#2a2826;
+      --color-border:#393836; --color-text:#e3e0d8; --color-text-muted:#b0aca2; --color-text-faint:#8b877d;
+      --color-primary:#4f98a3; --color-primary-soft:rgba(79,152,163,.18); --color-card:rgba(28,27,25,.84);
+      --shadow-sm:0 1px 2px rgba(0,0,0,.25); --shadow-md:0 12px 32px rgba(0,0,0,.32);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{min-height:100dvh;font-family:var(--font-body);font-size:var(--text-base);line-height:1.6;color:var(--color-text);background:var(--color-bg)}
+    a{color:inherit} button{font:inherit;cursor:pointer;background:none;border:none}
+    :focus-visible{outline:2px solid var(--color-primary);outline-offset:3px}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    .app{display:grid;grid-template-columns:380px 1fr;min-height:100dvh}
+    .sidebar{background:linear-gradient(180deg,var(--color-surface),var(--color-surface-2));border-right:1px solid var(--color-border);padding:var(--space-6);display:flex;flex-direction:column;gap:var(--space-5);overflow:auto}
+    .brand{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4)}
+    .logo{display:flex;gap:var(--space-3);align-items:flex-start}
+    .logo svg{width:40px;height:40px;color:var(--color-primary);flex:none}
+    h1{font-family:var(--font-display);font-size:var(--text-xl);line-height:1}
+    .lede{font-size:var(--text-sm);color:var(--color-text-muted);max-width:30ch;margin-top:var(--space-2)}
+    .toggle{min-width:44px;min-height:44px;border:1px solid var(--color-border);border-radius:var(--radius-full);background:var(--color-surface-offset);display:grid;place-items:center}
+    .panel{background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-5);box-shadow:var(--shadow-sm)}
+    .panel h2{font-size:var(--text-lg);margin-bottom:var(--space-3)}
+    .panel p{font-size:var(--text-sm);color:var(--color-text-muted)}
+    .legend-stack{display:grid;gap:var(--space-3)}
+    details.group{border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);overflow:hidden}
+    details.group[open]{background:var(--color-primary-soft)}
+    summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:.9rem 1rem;cursor:pointer}
+    summary::-webkit-details-marker{display:none}
+    .summary-left{display:flex;align-items:center;gap:var(--space-3)}
+    .swatch{width:14px;height:14px;border-radius:999px;flex:none}
+    .summary-label{font-size:var(--text-sm);font-weight:600}
+    .summary-copy{font-size:var(--text-xs);color:var(--color-text-muted);margin-top:.1rem}
+    .chev{font-size:var(--text-sm);color:var(--color-text-faint)}
+    .group-body{padding:0 1rem 1rem 1rem;display:grid;gap:var(--space-2)}
+    .jump-btn{width:100%;text-align:left;padding:.75rem .85rem;border-radius:var(--radius-md);border:1px solid var(--color-border);background:var(--color-surface-2);color:var(--color-text);font-size:var(--text-sm)}
+    .jump-btn:hover,.jump-btn.active{background:color-mix(in srgb, var(--color-primary) 10%, var(--color-surface-2));border-color:color-mix(in srgb, var(--color-primary) 35%, var(--color-border))}
+    .map-wrap{position:relative}
+    #map{height:100dvh;width:100%}
+    .floating{position:absolute;left:var(--space-6);right:var(--space-6);bottom:var(--space-6);display:flex;justify-content:flex-end;pointer-events:none}
+    .card{pointer-events:auto;max-width:430px;background:var(--color-card);backdrop-filter:blur(10px);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-5);box-shadow:var(--shadow-md)}
+    .card h3{font-family:var(--font-display);font-size:var(--text-lg);margin-bottom:var(--space-2)}
+    .card p{font-size:var(--text-sm);color:var(--color-text-muted)}
+    .note{font-size:var(--text-xs);color:var(--color-text-faint);margin-top:var(--space-3)}
+    .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--color-surface);color:var(--color-text)}
+    @media (max-width: 920px){.app{grid-template-columns:1fr}.sidebar{border-right:none;border-bottom:1px solid var(--color-border)}#map{height:68dvh}.floating{left:var(--space-4);right:var(--space-4);bottom:var(--space-4)}}
+  </style>
+</head>
+<body>
+  <a class="sr-only" href="#map">Skip to map</a>
+  <main class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" aria-label="KC trail logo">
+            <path d="M10 47c7-11 11-18 18-18 8 0 11 7 18 7 4 0 7-2 8-3" stroke-linecap="round"/>
+            <path d="M12 18c7 0 10 6 15 6 8 0 11-12 25-12" stroke-linecap="round"/>
+            <circle cx="16" cy="18" r="4" fill="currentColor" stroke="none"/>
+            <circle cx="49" cy="24" r="4" fill="currentColor" stroke="none"/>
+            <circle cx="42" cy="43" r="4" fill="currentColor" stroke="none"/>
+          </svg>
+          <div>
+            <h1>JOJO's KC BIKE MAP'</h1>
+            <p class="lede">shortcuts, scenic routes, construction zones, parks, gravel riding, greenways, unofficial connectors and secret routes -  an up to date "Jojo's-eye view" of Kansas City</p>
+          </div>
+        </div>
+        <button class="toggle" data-theme-toggle aria-label="Switch theme">◐</button>
+      </div>
+
+      <section class="panel">
+        <h2>Navigate:</h2>
+        <div class="legend-stack" id="legendStack"></div>
+      </section>
+    </aside>
+
+    <section class="map-wrap">
+      <div id="map" aria-label="JOJO's KC BIKE MAP'"></div>
+      <div class="floating">
+        <div class="card" id="infoCard">
+          <h3>How to use this</h3>
+          <p>Think in corridors, not perfect routes. Brush Creek is your east-west spine; Blue River is your north-south spine; parks, bridges, and neighborhoods help you stitch the rest together.</p>
+          <p class="note">Hand-built exploration map, not turn-by-turn navigation. Routes and conditions subject to rain, mud, snow, flooding, stray dogs, automobile traffic, law enforcement and other hazards - be cautious!</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+    const points = [
+      {name:'Volker', category:'Neighborhoods', type:'neighborhood', coords:[39.049, -94.603], text:'West anchor near Westport and the Plaza; strong handoff into Brush Creek.'},
+      {name:'Blue Hills', category:'Neighborhoods', type:'neighborhood', coords:[39.028, -94.554], text:'Mid-city ladder neighborhood between central KC and the east-side river world.'},
+      {name:'Vineyard', category:'Neighborhoods', type:'neighborhood', coords:[39.024, -94.518], text:'Useful middle connector when stitching Brush Creek toward Blue River and Swope.'},
+      {name:'East Blue Valley', category:'Neighborhoods', type:'neighborhood', coords:[39.090, -94.523], text:'Industrial-river corridor zone near Leeds and stadium-facing approaches.'},
+      {name:'Eastwood Hills', category:'Neighborhoods', type:'neighborhood', coords:[39.071, -94.500], text:'Farther east, closer to Blue River valley and Leeds-side access.'},
+      {name:'Stayton Meadows', category:'Neighborhoods', type:'neighborhood', coords:[39.060, -94.486], text:'East anchor for dropping into the Blue River and Leeds corridor.'},
+      {name:'South Indian Mound', category:'Neighborhoods', type:'neighborhood', coords:[39.110, -94.555], text:'Northeast stepping stone for Cliff Drive and Kessler access.'},
+      {name:'Dunbar', category:'Neighborhoods', type:'neighborhood', coords:[39.104, -94.538], text:'Pairs with South Indian Mound as a northeast ladder back toward Brush Creek and the east side grid.'},
+
+      {name:'53rd & Raytown area', category:'Ride anchors', type:'anchor', coords:[39.030, -94.504], text:'Your home-zone anchor for heading south to Minor Park or north into the east-side grid.'},
+      {name:'Blue Banks Park', category:'Ride anchors', type:'anchor', coords:[39.082, -94.525], text:'Brush Creek meets Blue River here; a key handoff between east-west and north-south trail logic.'},
+      {name:'Farewell / Leeds access', category:'Ride anchors', type:'anchor', coords:[39.091, -94.511], text:'Mid-river access near Leeds and Municipal Farm ideas; more exploratory than polished.'},
+      {name:'Minor Park tennis courts', category:'Ride anchors', type:'anchor', coords:[38.924, -94.527], text:'South anchor for the paved Blue River Greenway and one of your cleanest trail access points.'},
+      {name:'Cliff Drive / Kessler', category:'Ride anchors', type:'anchor', coords:[39.120, -94.549], text:'Classic northeast low-car corridor and a major loop ingredient.'},
+      {name:'Rock Island / Stadiums', category:'Ride anchors', type:'anchor', coords:[39.049, -94.484], text:"Separate spine for stadium, Raytown, and Lee's Summit rides; not the best direct path to Minor Park."},
+      {name:'Longview Trailhead North (Shelter 14)', category:'Ride anchors', type:'anchor', coords:[38.904, -94.479], text:'Primary Longview Lake paved trail access at Shelter 14 on Longview Road.'},
+      {name:"Longview Trailhead South (O'Donnell Park / Shelter 9)", category:'Ride anchors', type:'anchor', coords:[38.869, -94.488], text:"South end of the Longview Trail where it connects toward Grandview's trail system."},
+      {name:'Exploration / off-road note', category:'Ride anchors', type:'anchor', coords:[39.070, -94.515], text:'Mental reminder: levee, gravel, fence-gap, horse-trail, and rail-side cuts may be good when dry and terrible after weather.'},
+
+      {name:'Gladstone boundary', category:'Boundary anchors', type:'boundary', coords:[39.203, -94.554], text:'North boundary anchor for your metro diamond.'},
+      {name:'Blue Springs boundary', category:'Boundary anchors', type:'boundary', coords:[39.017, -94.281], text:'East boundary anchor for your metro diamond.'},
+      {name:'Grandview boundary', category:'Boundary anchors', type:'boundary', coords:[38.886, -94.533], text:'South boundary anchor for your metro diamond.'},
+      {name:'Overland Park boundary', category:'Boundary anchors', type:'boundary', coords:[38.982, -94.670], text:'West-southwest boundary anchor for your metro diamond.'},
+
+      {name:'Fleming Park', category:'Key parks', type:'park', coords:[39.034, -94.336], text:'Huge Jackson County park around Lake Jacomo and Blue Springs Lake with multiple trail systems.'},
+      {name:'Longview Lake Park', category:'Key parks', type:'park', coords:[38.886, -94.476], text:'Major south-metro park with the Longview Trail and connections toward Grandview.'},
+      {name:'Minor Park', category:'Key parks', type:'park', coords:[38.924, -94.527], text:'South KC anchor where the Blue River Greenway becomes one of the cleanest paved trail options.'},
+      {name:'Kessler Park', category:'Key parks', type:'park', coords:[39.121, -94.548], text:'Major northeast bluff park tied to Cliff Drive and trail access above downtown.'},
+      {name:'Sheffield Park', category:'Key parks', type:'park', coords:[39.097, -94.489], text:'East-side park near the stadium and Leeds corridor.'},
+
+      {name:'25th Street Pedestrian Bridge', category:'Ped bridges / sidewalks', type:'ped', coords:[39.083, -94.550], text:'New pedestrian bridge over I-70 opened in January 2026 as part of Improve I-70 KC.'},
+      {name:'Grand Blvd Bike & Ped Bridge', category:'Ped bridges / sidewalks', type:'ped', coords:[39.116, -94.577], text:'New bike-and-ped bridge opened in May 2026 linking the River Market toward the riverfront.'},
+
+      {name:'Oakley Ave Ped Bridge Replacement', category:'Planned / in progress', type:'planned', coords:[39.070, -94.505], text:'Pedestrian bridge over I-70 closed for replacement into 2026; worth watching in the field.'},
+      {name:'Grand / Lydia riverfront flyover concept', category:'Planned / in progress', type:'planned', coords:[39.121, -94.565], text:'Future connection concept linking surrounding neighborhoods toward the riverfront.'},
+      {name:'Gillham-Trolley-Brush Creek connector', category:'Planned / in progress', type:'planned', coords:[39.042, -94.576], text:'Protected connector work linking Gillham, Trolley Track, and Brush Creek corridors.'},
+      {name:'Greenline KC segments', category:'Planned / in progress', type:'planned', coords:[39.103, -94.588], text:'Downtown Greenline loop sections projected to open in phases.'},
+      {name:'Riverfront Streetcar Extension corridor', category:'Planned / in progress', type:'planned', coords:[39.111, -94.576], text:'Mapped corridor from 3rd & Grand across the viaduct toward Berkley Riverfront.'},
+      {name:'Blue River Trails Project', category:'Planned / in progress', type:'planned', coords:[39.000, -94.525], text:'KC Parks Blue River trail improvement process; a good corridor to watch.'}
+    ];
+
+    const lines = [
+      {name:'Brush Creek Greenway', category:'Trail spines', color:'#0b7a75', weight:5, dash:null, coords:[[39.038,-94.607],[39.040,-94.594],[39.044,-94.580],[39.051,-94.565],[39.060,-94.550],[39.070,-94.537],[39.082,-94.525]]},
+      {name:'Blue River north segment', category:'Trail spines', color:'#0b7a75', weight:5, dash:null, coords:[[39.082,-94.525],[39.073,-94.523],[39.064,-94.523],[39.055,-94.523],[39.045,-94.523],[39.036,-94.524],[39.028,-94.526]]},
+      {name:'Blue River south segment', category:'Trail spines', color:'#0b7a75', weight:5, dash:null, coords:[[39.028,-94.526],[39.010,-94.526],[38.990,-94.527],[38.970,-94.528],[38.950,-94.528],[38.936,-94.527],[38.924,-94.527]]},
+      {name:'Cliff Drive idea', category:'Trail spines', color:'#0b7a75', weight:5, dash:'8 8', coords:[[39.104,-94.538],[39.110,-94.544],[39.116,-94.548],[39.120,-94.549]]},
+      {name:'Rock Island idea', category:'Trail spines', color:'#0b7a75', weight:5, dash:'8 8', coords:[[39.049,-94.484],[39.040,-94.477],[39.030,-94.470],[39.018,-94.462]]},
+      {name:'Metro boundary diamond', category:'Boundary anchors', color:'#111111', weight:2, dash:'10 10', coords:[[39.203,-94.554],[39.017,-94.281],[38.886,-94.533],[38.982,-94.670],[39.203,-94.554]]},
+      {name:'Neighborhood ladder', category:'Surface / connector notes', color:'#8f8a80', weight:3, dash:'6 10', coords:[[39.110,-94.555],[39.104,-94.538],[39.090,-94.511],[39.082,-94.525],[39.060,-94.486],[39.071,-94.500],[39.024,-94.518],[39.028,-94.554],[39.049,-94.603]]},
+      {name:'53rd to Minor Park idea', category:'Surface / connector notes', color:'#8f8a80', weight:3, dash:'6 10', coords:[[39.030,-94.504],[39.020,-94.511],[39.010,-94.520],[38.990,-94.526],[38.960,-94.527],[38.924,-94.527]]},
+      {name:'Longview paved trail', category:'Trail spines', color:'#2f855a', weight:4, dash:null, coords:[[38.904,-94.479],[38.898,-94.482],[38.892,-94.486],[38.886,-94.490],[38.878,-94.490],[38.869,-94.488]]},
+      {name:'Longview to Grandview connector', category:'Trail spines', color:'#2f855a', weight:4, dash:'4 8', coords:[[38.869,-94.488],[38.875,-94.500],[38.880,-94.515],[38.886,-94.533]]},
+      {name:'Fleming / Blue Springs Lake trail zone', category:'Trail spines', color:'#2f855a', weight:4, dash:'4 8', coords:[[39.034,-94.336],[39.025,-94.322],[39.017,-94.308]]},
+      {name:'25th Street pedestrian link', category:'Ped bridges / sidewalks', color:'#c026d3', weight:4, dash:'2 8', coords:[[39.079,-94.552],[39.083,-94.550],[39.087,-94.548]]},
+      {name:'River Market bridge link', category:'Ped bridges / sidewalks', color:'#c026d3', weight:4, dash:'2 8', coords:[[39.112,-94.579],[39.116,-94.577],[39.121,-94.575]]},
+      {name:'Oakley replacement zone', category:'Planned / in progress', color:'#ef4444', weight:4, dash:'10 8', coords:[[39.064,-94.510],[39.070,-94.505],[39.076,-94.500]]},
+      {name:'Lydia flyover concept', category:'Planned / in progress', color:'#ef4444', weight:4, dash:'10 8', coords:[[39.118,-94.570],[39.121,-94.565],[39.126,-94.560]]},
+      {name:'Gillham-Trolley-Brush connector', category:'Planned / in progress', color:'#ef4444', weight:4, dash:'10 8', coords:[[39.037,-94.579],[39.042,-94.576],[39.048,-94.573]]},
+      {name:'Greenline KC concept', category:'Planned / in progress', color:'#ef4444', weight:4, dash:'10 8', coords:[[39.094,-94.600],[39.103,-94.588],[39.112,-94.575],[39.118,-94.560]]},
+      {name:'Riverfront streetcar / bridge corridor', category:'Planned / in progress', color:'#ef4444', weight:4, dash:'10 8', coords:[[39.112,-94.579],[39.111,-94.576],[39.112,-94.571],[39.114,-94.564],[39.116,-94.556],[39.118,-94.548]]},
+      {name:'Blue River Trails watch corridor', category:'Planned / in progress', color:'#ef4444', weight:4, dash:'10 8', coords:[[39.070,-94.523],[39.040,-94.525],[39.000,-94.525],[38.965,-94.527],[38.930,-94.527]]}
+    ];
+
+    const categoryMeta = {
+      'Trail spines': {swatch:'#0b7a75', copy:'Main trails, trail corridors, and core route ideas.'},
+      'Ride anchors': {swatch:'#a0512d', copy:'Important destinations, trailheads, and personal ride anchors.'},
+      'Neighborhoods': {swatch:'#6b5cff', copy:'Mental-map neighborhoods and stepping-stone areas.'},
+      'Boundary anchors': {swatch:'#111111', copy:'Your metro diamond and edge anchors.'},
+      'Key parks': {swatch:'#2f855a', copy:'Parks that matter because trails or connectors cluster around them.'},
+      'Ped bridges / sidewalks': {swatch:'#c026d3', copy:'Barrier-crossing links over interstates, rail, or hard edges.'},
+      'Planned / in progress': {swatch:'#ef4444', copy:'Watch-list projects that may become useful before official completion.'},
+      'Surface / connector notes': {swatch:'#8f8a80', copy:'Street stitches and condition-sensitive connectors.'}
+    };
+
+    const surfaceNotes = {
+      'Brush Creek Greenway':'Paved: reliable most of the time.',
+      'Blue River north segment':'Mixed corridor: paved logic with floodplain caution nearby.',
+      'Blue River south segment':'Paved core near Minor Park, but nearby dirt and bottoms can change fast after rain.',
+      'Cliff Drive idea':'Paved/road corridor with occasional condition variability depending on closures and debris.',
+      'Rock Island idea':'Mostly paved corridor idea once you are on the proper trail; connectors vary.',
+      'Neighborhood ladder':'Street-stitch connector: condition depends on your chosen cuts.',
+      '53rd to Minor Park idea':'Street and corridor stitch; watch drainage and low spots.',
+      'Metro boundary diamond':'Concept frame only.',
+      'Longview paved trail':'Paved: reliable most of the time.',
+      'Longview to Grandview connector':'May vary by connector choice and weather.',
+      'Fleming / Blue Springs Lake trail zone':'Mixed park trail zone; some segments are trail-surface dependent.',
+      '25th Street pedestrian link':'Bridge / sidewalk-style connector over a hard barrier.',
+      'River Market bridge link':'Bridge / sidewalk-style connector over a barrier or edge condition.',
+      'Oakley replacement zone':'Planned / in progress barrier crossing; watch real-world construction status.',
+      'Lydia flyover concept':'Planned riverfront connector; not yet a dependable route.',
+      'Gillham-Trolley-Brush connector':'Planned protected connector closing an important midtown gap.',
+      'Greenline KC concept':'Planned downtown loop segments that may open in phases.',
+      'Riverfront streetcar / bridge corridor':'Planned / mapped corridor with published alignment information.',
+      'Blue River Trails watch corridor':'Blue River project corridor to watch for segment build-out and connector opportunities.'
+    };
+
+    const map = L.map('map').setView([39.03, -94.535], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+    const infoCard = document.getElementById('infoCard');
+
+    function iconFor(type){
+      const colors = {neighborhood:'#6b5cff', anchor:'#a0512d', boundary:'#111111', park:'#2f855a', ped:'#c026d3', planned:'#ef4444'};
+      const fill = colors[type] || '#444444';
+      return L.divIcon({
+        className:'custom-marker',
+        html:`<div style="width:16px;height:16px;border-radius:999px;background:${fill};border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,.2)"></div>`,
+        iconSize:[16,16], iconAnchor:[8,8], popupAnchor:[0,-8]
+      });
+    }
+
+    const allBounds = [];
+    points.forEach(pt => allBounds.push(pt.coords));
+    lines.forEach(line => line.coords.forEach(c => allBounds.push(c)));
+
+    points.forEach(pt => {
+      const marker = L.marker(pt.coords, {icon: iconFor(pt.type)}).addTo(map);
+      marker.bindPopup(`<strong>${pt.name}</strong><br>${pt.text}`);
+      marker.on('click', () => {
+        const note = pt.type === 'anchor' ? 'Anchor point' : pt.type === 'boundary' ? 'Boundary anchor' : pt.type === 'park' ? 'Park anchor' : pt.type === 'ped' ? 'Ped bridge / sidewalk link' : pt.type === 'planned' ? 'Planned / in progress' : 'Neighborhood node';
+        infoCard.innerHTML = `<h3>${pt.name}</h3><p>${pt.text}</p><p class="note">${note}</p>`;
+      });
+      pt._marker = marker;
+    });
+
+    lines.forEach(line => {
+      const poly = L.polyline(line.coords, {color:line.color, weight:line.weight, opacity:.92, dashArray:line.dash || null}).addTo(map);
+      poly.bindPopup(`<strong>${line.name}</strong>`);
+      poly.on('click', () => {
+        infoCard.innerHTML = `<h3>${line.name}</h3><p>Use this as a corridor concept rather than exact navigation.</p><p class="note">${surfaceNotes[line.name] || 'Surface varies.'}</p>`;
+      });
+      line._poly = poly;
+    });
+
+    map.fitBounds(allBounds, {padding:[28,28]});
+
+    function flyToPoint(pt){
+      map.flyTo(pt.coords, 14, {duration:1.05});
+      pt._marker.openPopup();
+      const note = pt.type === 'anchor' ? 'Anchor point' : pt.type === 'boundary' ? 'Boundary anchor' : pt.type === 'park' ? 'Park anchor' : pt.type === 'ped' ? 'Ped bridge / sidewalk link' : pt.type === 'planned' ? 'Planned / in progress' : 'Neighborhood node';
+      infoCard.innerHTML = `<h3>${pt.name}</h3><p>${pt.text}</p><p class="note">${note}</p>`;
+    }
+
+    function flyToLine(line){
+      map.fitBounds(line.coords, {padding:[40,40]});
+      infoCard.innerHTML = `<h3>${line.name}</h3><p>Use this as a corridor concept rather than exact navigation.</p><p class="note">${surfaceNotes[line.name] || 'Surface varies.'}</p>`;
+    }
+
+    const legendStack = document.getElementById('legendStack');
+    Object.entries(categoryMeta).forEach(([name, meta]) => {
+      const items = points.filter(p => p.category === name);
+      const corridorItems = lines.filter(l => l.category === name);
+      const details = document.createElement('details');
+      details.className = 'group';
+      if (name === 'Trail spines' || name === 'Neighborhoods') details.open = true;
+      const summary = document.createElement('summary');
+      summary.innerHTML = `<div class="summary-left"><span class="swatch" style="background:${meta.swatch}"></span><div><div class="summary-label">${name}</div><div class="summary-copy">${meta.copy}</div></div></div><span class="chev">▾</span>`;
+      details.appendChild(summary);
+      const body = document.createElement('div');
+      body.className = 'group-body';
+
+      corridorItems.forEach(item => {
+        const btn = document.createElement('button');
+        btn.className = 'jump-btn';
+        btn.textContent = item.name;
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.jump-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          flyToLine(item);
+        });
+        body.appendChild(btn);
+      });
+
+      items.forEach(item => {
+        const btn = document.createElement('button');
+        btn.className = 'jump-btn';
+        btn.textContent = item.name;
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.jump-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          flyToPoint(item);
+        });
+        body.appendChild(btn);
+      });
+
+      details.appendChild(body);
+      legendStack.appendChild(details);
+    });
+
+    const root = document.documentElement;
+    const themeToggle = document.querySelector('[data-theme-toggle]');
+    let theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    root.setAttribute('data-theme', theme);
+    themeToggle.addEventListener('click', () => {
+      theme = theme === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', theme);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JOJO's KC BIKE MAP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body>
+  <a class="sr-only" href="#map">Skip to map</a>
+  <main class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" aria-label="KC trail logo">
+            <path d="M10 47c7-11 11-18 18-18 8 0 11 7 18 7 4 0 7-2 8-3" stroke-linecap="round"/>
+            <path d="M12 18c7 0 10 6 15 6 8 0 11-12 25-12" stroke-linecap="round"/>
+            <circle cx="16" cy="18" r="4" fill="currentColor" stroke="none"/>
+            <circle cx="49" cy="24" r="4" fill="currentColor" stroke="none"/>
+            <circle cx="42" cy="43" r="4" fill="currentColor" stroke="none"/>
+          </svg>
+          <div>
+            <h1>JOJO's KC BIKE MAP</h1>
+            <p class="lede">Shortcuts, scenic routes, greenways, and rider knowledge.</p>
+          </div>
+        </div>
+        <div style="display: flex; gap: var(--space-1);">
+          <button class="toggle" data-theme-toggle aria-label="Switch theme">◐</button>
+          <button id="helpBtn" class="toggle" aria-label="Show help">?</button>
+        </div>
+      </div>
+
+      <div class="controls-group">
+        <div style="display: flex; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden;">
+          <button id="tab-explore" class="jump-btn active" style="flex: 1; text-align: center; border: none; border-radius: 0;">Explore</button>
+          <button id="tab-search" class="jump-btn" style="flex: 1; text-align: center; border: none; border-radius: 0;">Search</button>
+          <button id="tab-admin" class="jump-btn" style="flex: 1; text-align: center; border: none; border-radius: 0;">Admin</button>
+        </div>
+      </div>
+
+      <div id="panel-explore">
+        <section class="panel">
+          <h2>Layers</h2>
+          <div class="legend-stack" style="margin-bottom: var(--space-4);">
+            <label class="layer-toggle">
+              <input type="checkbox" id="layer-intel" checked>
+              <span class="summary-label">Jojo's Rider Intel</span>
+            </label>
+            <label class="layer-toggle">
+              <input type="checkbox" id="layer-official">
+              <span class="summary-label">Official Regional Data (MARC)</span>
+            </label>
+            <label class="layer-toggle">
+              <input type="checkbox" id="layer-reports" checked>
+              <span class="summary-label">Field Reports & Alerts</span>
+            </label>
+          </div>
+
+          <h2>Navigate</h2>
+          <select id="categorySelect" class="jump-btn" style="width: 100%; padding: var(--space-2); font-weight: 600;">
+            <option value="">All Categories</option>
+          </select>
+          <div id="featureTiles" class="tiles-grid"></div>
+        </section>
+      </div>
+
+      <div id="panel-search" style="display: none;">
+        <section class="panel">
+          <h2>Find Feature</h2>
+          <input type="text" id="searchInput" placeholder="Search map..." class="jump-btn" style="padding: var(--space-3); font-size: var(--text-sm);">
+        </section>
+      </div>
+
+      <div id="panel-admin" style="display: none;">
+        <section class="panel">
+          <h2>Manage</h2>
+          <button id="loginBtn" class="jump-btn" style="text-align: center; width: 100%;">Login as Admin</button>
+          
+          <div id="adminActions" style="display: none; margin-top: var(--space-4);" class="panel">
+            <p style="font-size: var(--text-xs); color: var(--color-primary); font-weight: 700; text-transform: uppercase; margin-bottom: var(--space-2);">Admin Tools</p>
+            <div style="display: flex; gap: var(--space-2);">
+              <button id="addPointBtn" class="jump-btn" style="flex: 1; text-align: center; background: var(--color-surface);">+ Point</button>
+              <button id="addLineBtn" class="jump-btn" style="flex: 1; text-align: center; background: var(--color-surface);">+ Line</button>
+            </div>
+            <button id="importMarcBtn" class="jump-btn" style="width: 100%; text-align: center; background: var(--color-primary-soft); margin-top: var(--space-2);">Run MARC Import</button>
+            <button id="exportGeoJsonBtn" class="jump-btn" style="width: 100%; text-align: center; background: var(--color-surface); margin-top: var(--space-2);">Export GeoJSON</button>
+          </div>
+        </section>
+      </div>
+    </aside>
+
+    <section class="map-wrap">
+      <div id="map" aria-label="Map Container"></div>
+      
+      <!-- Quick Tools -->
+      <div style="position: absolute; bottom: var(--space-6); left: var(--space-6); z-index: 1000; display: flex; flex-direction: column; gap: var(--space-2);">
+        <button id="quickReportBtn" class="toggle" style="background: var(--color-primary); color: white; border: none; box-shadow: var(--shadow-md); width: 48px; height: 48px; font-size: 1.2rem;" title="Report an issue">⚠</button>
+      </div>
+      <div class="floating">
+        <div class="card" id="infoCard" style="display: none;">
+          <button id="closeInfoCard" style="position: absolute; top: var(--space-2); right: var(--space-3); font-size: 1.5rem; opacity: 0.4; background:none; border:none; cursor:pointer;">&times;</button>
+          <div id="infoCardContent"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Help Modal -->
+  <div id="helpModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>How to use this map</h2>
+      <p style="margin-top: var(--space-3); color: var(--color-text-muted);">Think in corridors, not perfect routes. Brush Creek is your east-west spine; Blue River is your north-south spine; parks, bridges, and neighborhoods help you stitch the rest together.</p>
+      <div class="note" style="margin-top: var(--space-4); background: var(--color-surface-offset); padding: var(--space-3); border-radius: var(--radius-md);">
+        <strong>Caution:</strong> Hand-built exploration map, not turn-by-turn navigation. Routes and conditions subject to rain, mud, snow, flooding, stray dogs, automobile traffic, law enforcement and other hazards.
+      </div>
+      <button id="closeHelpBtn" class="jump-btn" style="width: 100%; text-align: center; margin-top: var(--space-6); background: var(--color-primary); color: white; padding: var(--space-3);">Got it</button>
+    </div>
+  </div>
+
+  <!-- Feature Form Modal -->
+  <div id="featureModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2 id="modalTitle">Edit Feature</h2>
+      <form id="featureForm" style="display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-4);">
+        <input type="hidden" id="f_id">
+        <input type="hidden" id="f_type">
+        
+        <div class="field">
+          <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Name</label>
+          <input type="text" id="f_name" required class="jump-btn" style="width: 100%; background: var(--color-bg);">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
+          <div class="field">
+            <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Category</label>
+            <select id="f_category" class="jump-btn" style="width: 100%; background: var(--color-bg);"></select>
+          </div>
+          <div class="field">
+            <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Status</label>
+            <select id="f_status" class="jump-btn" style="width: 100%; background: var(--color-bg);">
+              <option value="active">Active</option>
+              <option value="caution">Caution</option>
+              <option value="closed">Closed</option>
+              <option value="planned">Planned</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
+          <div class="field">
+            <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Officiality</label>
+            <select id="f_officiality" class="jump-btn" style="width: 100%; background: var(--color-bg);">
+              <option value="official">Official</option>
+              <option value="unofficial">Unofficial</option>
+              <option value="planned">Planned</option>
+              <option value="social">Social Path</option>
+            </select>
+          </div>
+          <div class="field">
+            <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Visibility</label>
+            <select id="f_visibility" class="jump-btn" style="width: 100%; background: var(--color-bg);">
+              <option value="public">Public</option>
+              <option value="sensitive">Sensitive</option>
+              <option value="private">Private</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
+          <div class="field">
+            <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Longevity</label>
+            <select id="f_longevity" class="jump-btn" style="width: 100%; background: var(--color-bg);">
+              <option value="temporary">Temporary (48hr fade)</option>
+              <option value="permanent">Permanent / Long-term</option>
+            </select>
+          </div>
+          <div class="field">
+            <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Your Email (for delete/edit)</label>
+            <input type="email" id="f_poster_email" class="jump-btn" style="width: 100%; background: var(--color-bg);" placeholder="rider@kcmo.xyz">
+          </div>
+        </div>
+
+        <div class="field">
+          <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Description</label>
+          <textarea id="f_description" rows="3" class="jump-btn" style="width: 100%; background: var(--color-bg); font-family: inherit;"></textarea>
+        </div>
+
+        <div class="field">
+          <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Surface Note</label>
+          <input type="text" id="f_surface_note" class="jump-btn" style="width: 100%; background: var(--color-bg);">
+        </div>
+
+        <div class="field">
+          <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Geometry (JSON)</label>
+          <div style="display: flex; gap: var(--space-2);">
+            <textarea id="f_geometry" required rows="2" class="jump-btn" style="width: 100%; background: var(--color-bg); font-family: monospace; font-size: 10px;"></textarea>
+            <button type="button" id="pickOnMapBtn" class="jump-btn" style="width: auto; white-space: nowrap;">Pick on Map</button>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: var(--space-3); margin-top: var(--space-2);">
+          <button type="button" id="closeModalBtn" class="jump-btn" style="flex: 1; text-align: center;">Cancel</button>
+          <button type="submit" class="jump-btn" style="flex: 1; text-align: center; background: var(--color-primary); color: white;">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

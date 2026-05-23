@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+.npm
+package-lock.json
+
+# Cloudflare Wrangler
+.wrangler/
+.dev.vars
+
+# Build output
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+.env.local

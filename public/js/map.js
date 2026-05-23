@@ -172,7 +172,7 @@ export function toggleLayer(layerId, visible) {
   }
 }
 
-export function renderMap(features, allFeaturesCount, onFeatureClick, onMarkerDrag) {
+export function renderMap(features, allFeaturesCount, onFeatureClick, onMarkerDrag, isAdminFlag) {
   Object.values(layers).forEach(group => {
     if (!(group instanceof L.TileLayer)) group.clearLayers();
   });
@@ -202,10 +202,10 @@ export function renderMap(features, allFeaturesCount, onFeatureClick, onMarkerDr
       const marker = L.marker(coords, { 
         icon: iconFor(f),
         opacity: opacity,
-        draggable: isAdmin && f.feature_type === 'point'
+        draggable: isAdminFlag && f.feature_type === 'point'
       }).addTo(targetGroup);
 
-      if (isAdmin && onMarkerDrag) {
+      if (isAdminFlag && onMarkerDrag) {
         marker.on('dragend', (e) => {
           const newPos = e.target.getLatLng();
           onMarkerDrag(f, [newPos.lng, newPos.lat]);

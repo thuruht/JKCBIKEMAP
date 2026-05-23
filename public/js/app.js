@@ -51,7 +51,7 @@ function updateAdminUI() {
   }
   
   if (allFeatures.length) {
-    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin));
+    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag, isAdmin);
     renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isAdmin)));
   }
 }
@@ -59,7 +59,7 @@ function updateAdminUI() {
 async function refreshData() {
   try {
     allFeatures = await fetchFeatures();
-    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag);
+    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag, isAdmin);
     renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isAdmin)));
   } catch (err) {
     console.error('Failed to fetch features:', err);
@@ -116,7 +116,7 @@ async function init() {
       const q = e.target.value.toLowerCase();
       if (!q) {
         if (searchResultsList) searchResultsList.innerHTML = '';
-        renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag);
+        renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag, isAdmin);
         return;
       }
 
@@ -170,7 +170,7 @@ async function init() {
           }
         }
 
-        renderMap(filtered, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag);
+        renderMap(filtered, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag, isAdmin);
       }, 400);
     });
   }

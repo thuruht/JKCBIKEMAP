@@ -31,7 +31,7 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
     <div style="margin-bottom: var(--space-4);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
         <small>${f.category}</small>
-        ${isAdmin ? `<button class="jump-btn" id="editFeatureBtn" style="padding: 2px 8px; font-size: 10px; background: var(--color-surface-offset);">Edit Intelligence</button>` : ''}
+        ${(isAdmin && f.id) ? `<button class="jump-btn" id="editFeatureBtn" style="padding: 2px 8px; font-size: 10px; background: var(--color-surface-offset);">Edit Intelligence</button>` : ''}
       </div>
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3);">
         <h3 style="margin: 0; line-height: 1.1; flex: 1;">${catIcon} ${f.name}</h3>

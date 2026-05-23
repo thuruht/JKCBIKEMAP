@@ -65,15 +65,18 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
       try {
         await env.SEND_EMAIL.send({
           to: [{ email }],
-          from: { email: "auth@jojomap.kcmo.xyz", name: "Jojo's KC Bike Map" },
+          from: { email: "no-reply@jojomap.kcmo.xyz", name: "Jojo's KC Bike Map" },
           subject: "Your Magic Login Link",
           content: [
             { type: "text/plain", value: `Click here to login: ${loginUrl}` },
             { type: "text/html", value: `<p>Click here to login: <a href="${loginUrl}">${loginUrl}</a></p>` }
           ]
         });
+        console.log(`Magic Link sent to ${email} via Native API`);
       } catch (err: any) {
-        console.error("Native Email Sending failed:", err.message);
+        console.error("Native Email Sending failed critically:", err.message);
+        // Fallback log for dev visibility if email is blocked
+        console.log(`EMERGENCY ACCESS LINK: ${loginUrl}`);
       }
     } else {
       console.log(`MAGIC LINK (No Email Binding): ${loginUrl}`);

@@ -86,8 +86,8 @@ let layers = {
 export function initLeafletMap(elementId, center, zoom) {
   map = L.map(elementId).setView(center, zoom);
   
-  // Default to Dark Mode for the Crypt aesthetic
-  currentBasemap = basemaps.dark;
+  // Default to Pioneer for high-fidelity trail navigation
+  currentBasemap = basemaps.pioneer;
   currentBasemap.addTo(map);
   
   // Add feature layers to map

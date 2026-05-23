@@ -15,9 +15,22 @@ const basemaps = {
     subdomains: 'abcd',
     maxZoom: 20
   }),
-  osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors',
+  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community',
     maxZoom: 19
+  }),
+  night: L.tileLayer('https://map1.vis.earthdata.nasa.gov/wmts-webmerc/VIIRS_CityLights_2012/default/{time}/{tilematrixset}{maxZoom}/{z}/{y}/{x}.{format}', {
+    attribution: '&copy; NASA',
+    bounds: [[-85.0511287776, -179.999999975], [85.0511287776, 179.999999975]],
+    minZoom: 1,
+    maxZoom: 8,
+    format: 'jpg',
+    time: '',
+    tilematrixset: 'GoogleMapsCompatible_Level'
+  }),
+  cyclosm: L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors &copy; CyclOSM',
+    maxZoom: 20
   }),
   terrain: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
     attribution: 'Map data: &copy; OSM contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)',

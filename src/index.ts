@@ -3,6 +3,7 @@ import { D1Database, Fetcher } from "@cloudflare/workers-types";
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
+  KV: KVNamespace; // Cloudflare KV for user preferences
   SEND_EMAIL: any; // Cloudflare Email Sending Beta
   ADMIN_TOKEN?: string;
   APP_URL?: string;
@@ -31,7 +32,7 @@ export default {
       return handleMarcImport(env);
     }
 
-    // Serve static assets
+    // Serve static assets with CSP
     const response = await env.ASSETS.fetch(request);
     const newHeaders = new Headers(response.headers);
     newHeaders.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org; connect-src 'self' https://overpass-api.de;");
@@ -177,7 +178,19 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
 
   if (method === "GET" && path === "me") {
     if (!user) return jsonResponse({ authenticated: false }, 401);
-    return jsonResponse({ authenticated: true, user });
+    const prefs = await env.KV.get(`prefs:${user.id}`);
+    return jsonResponse({ 
+      authenticated: true, 
+      user, 
+      preferences: prefs ? JSON.parse(prefs) : {} 
+    });
+  }
+
+  if (method === "POST" && path === "me/preferences") {
+    if (!user) return jsonResponse({ error: "Authentication required" }, 401);
+    const body = await request.json() as any;
+    await env.KV.put(`prefs:${user.id}`, JSON.stringify(body));
+    return jsonResponse({ success: true });
   }
 
   if (method === "GET" && path === "amenities") {
@@ -264,7 +277,7 @@ function jsonResponse(data: any, status = 200): Response {
     headers: { 
       "Content-Type": "application/json", 
       "Access-Control-Allow-Origin": "*",
-      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com; connect-src 'self' https://overpass-api.de;"
+      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org; connect-src 'self' https://overpass-api.de;"
     },
   });
 }

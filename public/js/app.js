@@ -151,6 +151,13 @@ async function init() {
           if (userLoggedInView) userLoggedInView.style.display = 'block';
           if (userEmailDisplay) userEmailDisplay.textContent = data.user.email;
           isAdmin = isAdmin || data.user.role === 'admin';
+          
+          // Apply saved basemap preference
+          if (data.preferences && data.preferences.basemap) {
+            switchBasemap(data.preferences.basemap);
+            if (basemapSelect) basemapSelect.value = data.preferences.basemap;
+          }
+          
           updateAdminUI();
         }
       }
@@ -258,7 +265,24 @@ async function init() {
 
   const basemapSelect = document.getElementById('basemapSelect');
   if (basemapSelect) {
-    basemapSelect.addEventListener('change', (e) => switchBasemap(e.target.value));
+    basemapSelect.addEventListener('change', async (e) => {
+      const basemapId = e.target.value;
+      switchBasemap(basemapId);
+      
+      // Save to KV if logged in
+      const hasSession = document.cookie.includes('session=');
+      if (hasSession) {
+        try {
+          await fetch('/api/me/preferences', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ basemap: basemapId })
+          });
+        } catch (err) {
+          console.error('Failed to save preferences:', err);
+        }
+      }
+    });
   }
 
   if (amenitiesToggle) {

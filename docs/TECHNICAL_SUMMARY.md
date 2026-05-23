@@ -27,17 +27,20 @@ A high-fidelity rider intelligence tool for the Kansas City metro. Unlike generi
 
 ## Architecture (Cloudflare Stack)
 
-- **Worker API:** TypeScript-based backend handling features, search, and admin actions.
-- **D1 Database:** Relational SQL (SQLite) for structured feature data and revision history.
+- **Worker API:** TypeScript-based backend handling features, search, auth, and preferences.
+- **D1 Database:** Relational SQL (SQLite) for structured feature data, users, and sessions.
+- **KV Storage:** Used for high-speed retrieval of user-specific preferences (e.g., preferred basemap style).
 - **Static Assets:** High-performance frontend hosting via Cloudflare Workers Assets.
 - **Localized Dependencies:** Leaflet and GSAP are hosted locally in `/vendor/` to remove reliance on external CDNs.
-- **Basemap Variety:** Defaults to **CartoDB Dark Matter**, with high-performance options for Voyager, OSM, and Terrain.
+- **Basemap Variety:** Defaults to **CartoDB Dark Matter**, with high-performance options for Voyager, OSM, and Terrain. Persists user choice to KV.
 
 ## Admin System
 - **Integrated Login:** Dedicated authentication view in the sidebar replaces browser alerts.
-- **Persistent Sessions:** Admin state is persisted locally for a seamless management experience.
+- **Magic Link Auth:** Passwordless login system using Cloudflare Email Sending (Beta).
+- **Persistent Sessions:** Admin and User states are persisted locally and validated server-side.
 - **Admin Marker Dragging:** Admins can drag point markers directly on the map to fine-tune coordinates. Changes save instantly.
-- **Tools:** In-browser tools for adding/editing points and lines, and a one-click MARC data update.
+- **Tools:** In-browser tools for adding/editing points and lines, dragging markers, and a one-click MARC data update.
+
 
 ## Data Model Updates
 - Added `longevity`, `poster_email`, and `delete_token` to the `features` table.

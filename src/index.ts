@@ -185,15 +185,20 @@ async function handleMarcImport(env: Env): Promise<Response> {
       }
 
       if (statements.length > 0) {
-        await env.DB.batch(statements);
-        importedCount += chunk.length;
+        try {
+          await env.DB.batch(statements);
+          importedCount += chunk.length;
+        } catch (batchErr: any) {
+          console.error("Batch Import Error:", batchErr.message);
+          throw new Error(`D1 Batch failed: ${batchErr.message}`);
+        }
       }
     }
 
     return new Response(`Successfully imported ${importedCount} MARC features in chunks.`, { status: 200 });
   } catch (err: any) {
     console.error("Critical Import Error:", err.message);
-    return new Response(`Critical Error: ${err.message}`, { status: 500 });
+    return new Response(`Critical Error: ${err.message}\n${err.stack}`, { status: 500 });
   }
 }
 
@@ -203,7 +208,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     const path = url.pathname.replace("/api/", "");
 
     const cookieHeader = request.headers.get("Cookie") || "";
-    const sessionToken = cookieHeader.split("; ").find(c => c.startsWith("session="))?.split("=")[1];
+    const sessionToken = cookieHeader.split(";").find(c => c.trim().startsWith("session="))?.split("=")[1];
     const authHeader = request.headers.get("Authorization") || "";
     
     let user: any = null;
@@ -225,7 +230,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     }
 
     // 2. Check for ADMIN_TOKEN master key
-    if (!isAdmin && env.ADMIN_TOKEN && authHeader === `Bearer ${env.ADMIN_TOKEN}`) {
+    if (!isAdmin && env.ADMIN_TOKEN && authHeader.trim() === `Bearer ${env.ADMIN_TOKEN}`) {
       isAdmin = true;
     }
 
@@ -266,12 +271,10 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       
       const query = `[out:json][timeout:25];(node["amenity"~"drinking_water|bicycle_repair_station"](${bbox});node["shop"="bicycle"](${bbox}););out;`;
       
-      // Try primary Overpass instance
       let resp = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`, {
         headers: { 'User-Agent': 'JojoKCMap/1.0 (Cloudflare Worker; contact: admin@jojomap.kcmo.xyz)' }
       });
 
-      // Fallback to secondary if primary fails
       if (!resp.ok) {
         console.warn(`Primary Overpass failed (${resp.status}), trying fallback...`);
         resp = await fetch(`https://overpass.osm.ch/api/interpreter?data=${encodeURIComponent(query)}`, {
@@ -299,9 +302,6 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       
       return jsonResponse(results.map(f => {
         const isSensitive = f.visibility === 'sensitive';
-        
-        // Access Control: Discretion logic
-        // Guests and Level 1 see generalized data for sensitive features
         const hasFullAccess = isAdmin || isHighRep;
         
         let geometry = f.public_geometry;
@@ -309,11 +309,17 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
           geometry = f.admin_geometry;
         }
 
+        let parsedGeom = null;
+        try {
+          parsedGeom = geometry ? JSON.parse(geometry as string) : null;
+        } catch (pe) {
+          console.error(`Geom parse failed for ${f.id}:`, pe);
+        }
+
         return {
           ...f,
           admin_geometry: isAdmin ? f.admin_geometry : undefined,
-          geometry: geometry ? JSON.parse(geometry as string) : null,
-          // Restrict sensitive metadata to high-rep users
+          geometry: parsedGeom,
           public_description: (isSensitive && !hasFullAccess) ? "Detailed knowledge restricted to established contributors." : f.public_description,
           admin_note: isAdmin ? f.admin_note : undefined,
           surface_note: (isSensitive && !hasFullAccess) ? null : f.surface_note
@@ -326,23 +332,24 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       if (!body.name) return new Response("Name is required", { status: 400 });
       
       const id = crypto.randomUUID();
-      const slug = body.slug || body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const slug = body.slug || body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + Math.random().toString(36).slice(2, 5);
       const deleteToken = (user || isAdmin) ? null : (body.poster_email ? crypto.randomUUID() : null);
 
       await env.DB.prepare(`
         INSERT INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note, risk_note, weather_sensitivity, source_confidence, longevity, poster_email, delete_token, owner_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, slug, body.name, body.feature_type, body.category, body.status, 
-        body.visibility || 'public', body.officiality || 'official', body.public_description, body.surface_note,
-        body.risk_note, body.weather_sensitivity, body.source_confidence, body.longevity, body.poster_email, deleteToken, user?.user_id || null).run();
+      `).bind(id, slug, body.name || 'Unnamed', body.feature_type || 'point', body.category || 'Local Knowledge', body.status || 'active', 
+        body.visibility || 'public', body.officiality || 'unofficial', body.public_description || null, body.surface_note || null,
+        body.risk_note || null, body.weather_sensitivity || 'none', body.source_confidence || 'medium', body.longevity || 'permanent', 
+        body.poster_email || null, deleteToken, user?.user_id || null).run();
 
       await env.DB.prepare("INSERT INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
-        .bind(id, JSON.stringify(body.geometry)).run();
+        .bind(id, JSON.stringify(body.geometry || null)).run();
 
       if (body.sources) {
         for (const s of body.sources) {
           await env.DB.prepare("INSERT INTO feature_sources (id, feature_id, source_url, source_note) VALUES (?, ?, ?, ?)")
-            .bind(crypto.randomUUID(), id, s.url, s.note).run();
+            .bind(crypto.randomUUID(), id, s.url || null, s.note || null).run();
         }
       }
 
@@ -353,7 +360,6 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       const id = path.split("/")[1];
       const body = await request.json() as any;
       
-      // Auth Check: Must be admin or owner
       const feature = await env.DB.prepare("SELECT owner_id FROM features WHERE id = ?").bind(id).first() as { owner_id: string } | null;
       if (!isAdmin && feature?.owner_id !== user?.user_id) {
         return new Response("Unauthorized", { status: 401 });
@@ -365,9 +371,9 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
           public_description = ?, surface_note = ?, risk_note = ?, weather_sensitivity = ?, 
           source_confidence = ?, longevity = ?, poster_email = ?
         WHERE id = ?
-      `).bind(body.name, body.category, body.status, body.visibility, body.officiality, 
-        body.public_description, body.surface_note, body.risk_note, body.weather_sensitivity, 
-        body.source_confidence, body.longevity, body.poster_email, id).run();
+      `).bind(body.name || 'Unnamed', body.category || 'Local Knowledge', body.status || 'active', body.visibility || 'public', body.officiality || 'unofficial', 
+        body.public_description || null, body.surface_note || null, body.risk_note || null, body.weather_sensitivity || 'none', 
+        body.source_confidence || 'medium', body.longevity || 'permanent', body.poster_email || null, id).run();
 
       if (body.geometry) {
         await env.DB.prepare("UPDATE feature_geometries SET public_geometry = ? WHERE feature_id = ?")
@@ -378,7 +384,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         await env.DB.prepare("DELETE FROM feature_sources WHERE feature_id = ?").bind(id).run();
         for (const s of body.sources) {
           await env.DB.prepare("INSERT INTO feature_sources (id, feature_id, source_url, source_note) VALUES (?, ?, ?, ?)")
-            .bind(crypto.randomUUID(), id, s.url, s.note).run();
+            .bind(crypto.randomUUID(), id, s.url || null, s.note || null).run();
         }
       }
 
@@ -390,13 +396,13 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       const sources = await env.DB.prepare("SELECT * FROM feature_sources WHERE feature_id = ?").bind(id).all();
       const reports = await env.DB.prepare("SELECT * FROM reports WHERE feature_id = ? ORDER BY created_at DESC").bind(id).all();
       const comments = await env.DB.prepare("SELECT * FROM comments WHERE feature_id = ? ORDER BY created_at DESC").bind(id).all();
-      return jsonResponse({ sources: sources.results, reports: reports.results, comments: comments.results });
+      return jsonResponse({ sources: sources.results || [], reports: reports.results || [], comments: comments.results || [] });
     }
 
     return new Response("Not Found", { status: 404 });
   } catch (err: any) {
-    console.error("API Request Error:", err.message);
-    return new Response(`Server Error: ${err.message}`, { status: 500 });
+    console.error("API Request Error:", err.message, err.stack);
+    return new Response(`Server Error: ${err.message}\n${err.stack}`, { status: 500 });
   }
 }
 
@@ -406,7 +412,6 @@ function jsonResponse(data: any, status = 200): Response {
     headers: { 
       "Content-Type": "application/json", 
       "Access-Control-Allow-Origin": "*",
-      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org https://*.vis.earthdata.nasa.gov https://*.arcgisonline.com https://*.tile-cyclosm.openstreetmap.fr https://mt1.google.com https://*.tile.thunderforest.com https://*.tile.openstreetmap.fr https://tile.osm.ch https://tile.memomaps.de https://*.tiles.openrailwaymap.org https://tile.waymarkedtrails.org; connect-src 'self' https://overpass-api.de https://overpass.osm.ch https://nominatim.openstreetmap.org https://cloudflareinsights.com https://*.cloudflareinsights.com;"
     },
   });
 }

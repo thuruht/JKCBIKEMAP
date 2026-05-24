@@ -372,10 +372,9 @@ export function initThemeToggle() {
         basemapSelect.value = targetBasemap;
       }
     }
-
-    // Sync to KV if logged in
-    const hasSession = document.cookie.includes('session=');
-    if (hasSession) {
+// Sync to KV if logged in
+const hasSession = document.cookie.includes('session=');
+if (hasSession) {
       try {
         const basemapSelect = document.getElementById('basemapSelect');
         const currentBasemap = basemapSelect ? basemapSelect.value : 'pioneer';

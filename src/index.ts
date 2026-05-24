@@ -67,7 +67,7 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
       if (env.SEND_EMAIL) {
         // Native Cloudflare Email Sending (requires domain onboarded)
         await env.SEND_EMAIL.send({
-          from: "whatvr@jojomap.kcmo.xyz",
+          from: "admin@jojomap.kcmo.xyz",
           to: [email],
           subject: "Your Magic Login Link",
           text: `Click here to login: ${loginUrl}`,

@@ -140,16 +140,19 @@ async function handleMarcImport(env: Env): Promise<Response> {
     if (!resp.ok) return new Response(`Failed to fetch MARC data: ${resp.status}`, { status: 500 });
     const data = await resp.json() as any;
 
-    if (!data.features) {
-      console.error("MARC Data missing features array:", data);
-      return new Response("MARC Data missing features", { status: 500 });
+    if (!data.features || !Array.isArray(data.features)) {
+      return new Response("MARC Data missing features array", { status: 500 });
     }
 
-    let count = 0;
-    for (const feature of data.features) {
-      const props = feature.properties;
+    const statements: any[] = [];
+    const limit = 300; // Stick to 300 for reliability in a single Worker request
+    const featuresToProcess = data.features.slice(0, limit);
+
+    for (const feature of featuresToProcess) {
+      const props = feature.properties || {};
       const geom = feature.geometry;
-      // MARC property names can vary, try a few common ones
+      if (!geom) continue;
+
       const name = props.RouteName || props.Name || props.TrailName || 'Unnamed MARC Trail';
       const jurisdiction = props.Jurisdiction || props.City || 'Regional';
       const facility = props.FacilityType || props.Type || 'Trail';
@@ -158,25 +161,23 @@ async function handleMarcImport(env: Env): Promise<Response> {
       const slug = 'marc-' + crypto.randomUUID();
       const id = crypto.randomUUID();
 
-      try {
-        await env.DB.prepare(`
-          INSERT OR IGNORE INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(id, slug, name, 'line', 'Official Regional Data', 'active', 'public', 'official',
-          `Jurisdiction: ${jurisdiction}. Type: ${facility}.`,
-          surface).run();
+      statements.push(env.DB.prepare(`
+        INSERT OR IGNORE INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(id, slug, name, 'line', 'Official Regional Data', 'active', 'public', 'official',
+        `Jurisdiction: ${jurisdiction}. Type: ${facility}.`,
+        surface));
 
-        await env.DB.prepare("INSERT OR IGNORE INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
-          .bind(id, JSON.stringify(geom)).run();
-
-        count++;
-      } catch (dbErr: any) {
-        console.error(`DB Error on feature ${name}:`, dbErr.message);
-      }
-
-      if (count >= 500) break; // Increased limit slightly
+      statements.push(env.DB.prepare("INSERT OR IGNORE INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
+        .bind(id, JSON.stringify(geom)));
     }
-    return new Response(`Imported ${count} features`, { status: 200 });
+
+    if (statements.length > 0) {
+      // Execute all inserts in a single transaction
+      await env.DB.batch(statements);
+    }
+
+    return new Response(`Successfully imported ${featuresToProcess.length} MARC features via batched transaction.`, { status: 200 });
   } catch (err: any) {
     console.error("Critical Import Error:", err.message);
     return new Response(`Critical Error: ${err.message}`, { status: 500 });

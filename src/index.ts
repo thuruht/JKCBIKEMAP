@@ -62,21 +62,31 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
 
     const loginUrl = `${env.APP_URL || url.origin}/auth/verify?token=${token}`;
 
-    if (env.SEND_EMAIL) {
+    if (true) { // Use MailChannels for better reliability on Workers
       try {
-        await env.SEND_EMAIL.send({
-          to: [{ email }],
-          from: { email: "no-reply@jojomap.kcmo.xyz", name: "Jojo's KC Bike Map" },
-          subject: "Your Magic Login Link",
-          content: [
-            { type: "text/plain", value: `Click here to login: ${loginUrl}` },
-            { type: "text/html", value: `<p>Click here to login: <a href="${loginUrl}">${loginUrl}</a></p>` }
-          ]
+        const resp = await fetch("https://api.mailchannels.net/tx/v1/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            personalizations: [{ to: [{ email }] }],
+            from: { email: "no-reply@jojomap.kcmo.xyz", name: "Jojo's KC Bike Map" },
+            subject: "Your Magic Login Link",
+            content: [
+              { type: "text/plain", value: `Click here to login: ${loginUrl}` },
+              { type: "text/html", value: `<p>Click here to login: <a href="${loginUrl}">${loginUrl}</a></p>` }
+            ]
+          })
         });
-        console.log(`Magic Link sent to ${email} via Native API`);
+        
+        if (resp.ok) {
+          console.log(`Magic Link sent to ${email} via MailChannels`);
+        } else {
+          const errorText = await resp.text();
+          throw new Error(`MailChannels failed: ${errorText}`);
+        }
       } catch (err: any) {
-        console.error("Native Email Sending failed critically:", err.message);
-        // Fallback log for dev visibility if email is blocked
+        console.error("Email Sending failed:", err.message);
+        // Fallback log for dev visibility
         console.log(`EMERGENCY ACCESS LINK: ${loginUrl}`);
       }
     } else {

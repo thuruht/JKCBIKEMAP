@@ -136,48 +136,61 @@ async function handleMarcImport(env: Env): Promise<Response> {
 
   try {
     console.log("Fetching MARC data from:", MARC_URL);
-    const resp = await fetch(MARC_URL);
-    if (!resp.ok) return new Response(`Failed to fetch MARC data: ${resp.status}`, { status: 500 });
+    const resp = await fetch(MARC_URL, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Cloudflare Worker)' }
+    });
+    
+    if (!resp.ok) {
+      const errText = await resp.text();
+      return new Response(`MARC API Error ${resp.status}: ${errText.slice(0, 100)}`, { status: 500 });
+    }
+    
     const data = await resp.json() as any;
 
     if (!data.features || !Array.isArray(data.features)) {
       return new Response("MARC Data missing features array", { status: 500 });
     }
 
-    const statements: any[] = [];
-    const limit = 300; // Stick to 300 for reliability in a single Worker request
+    const limit = 200; // Total features to import
+    const batchSize = 50; // Features per D1 transaction
     const featuresToProcess = data.features.slice(0, limit);
+    let importedCount = 0;
 
-    for (const feature of featuresToProcess) {
-      const props = feature.properties || {};
-      const geom = feature.geometry;
-      if (!geom) continue;
+    for (let i = 0; i < featuresToProcess.length; i += batchSize) {
+      const chunk = featuresToProcess.slice(i, i + batchSize);
+      const statements: any[] = [];
 
-      const name = props.RouteName || props.Name || props.TrailName || 'Unnamed MARC Trail';
-      const jurisdiction = props.Jurisdiction || props.City || 'Regional';
-      const facility = props.FacilityType || props.Type || 'Trail';
-      const surface = props.SurfaceType || props.Surface || 'Unknown';
-      
-      const slug = 'marc-' + crypto.randomUUID();
-      const id = crypto.randomUUID();
+      for (const feature of chunk) {
+        const props = feature.properties || {};
+        const geom = feature.geometry;
+        if (!geom) continue;
 
-      statements.push(env.DB.prepare(`
-        INSERT OR IGNORE INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, slug, name, 'line', 'Official Regional Data', 'active', 'public', 'official',
-        `Jurisdiction: ${jurisdiction}. Type: ${facility}.`,
-        surface));
+        const name = props.RouteName || props.Name || props.TrailName || 'Unnamed MARC Trail';
+        const jurisdiction = props.Jurisdiction || props.City || 'Regional';
+        const facility = props.FacilityType || props.Type || 'Trail';
+        const surface = props.SurfaceType || props.Surface || 'Unknown';
+        
+        const slug = 'marc-' + crypto.randomUUID();
+        const id = crypto.randomUUID();
 
-      statements.push(env.DB.prepare("INSERT OR IGNORE INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
-        .bind(id, JSON.stringify(geom)));
+        statements.push(env.DB.prepare(`
+          INSERT OR IGNORE INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(id, slug, name, 'line', 'Official Regional Data', 'active', 'public', 'official',
+          `Jurisdiction: ${jurisdiction}. Type: ${facility}.`,
+          surface));
+
+        statements.push(env.DB.prepare("INSERT OR IGNORE INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
+          .bind(id, JSON.stringify(geom)));
+      }
+
+      if (statements.length > 0) {
+        await env.DB.batch(statements);
+        importedCount += chunk.length;
+      }
     }
 
-    if (statements.length > 0) {
-      // Execute all inserts in a single transaction
-      await env.DB.batch(statements);
-    }
-
-    return new Response(`Successfully imported ${featuresToProcess.length} MARC features via batched transaction.`, { status: 200 });
+    return new Response(`Successfully imported ${importedCount} MARC features in chunks.`, { status: 200 });
   } catch (err: any) {
     console.error("Critical Import Error:", err.message);
     return new Response(`Critical Error: ${err.message}`, { status: 500 });

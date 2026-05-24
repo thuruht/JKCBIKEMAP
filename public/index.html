@@ -44,36 +44,39 @@
           <h2>Layers</h2>
           <div class="field" style="margin-bottom: var(--space-4);">
             <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Map Style</label>
-            <select id="basemapSelect" class="jump-btn" style="width: 100%; background: var(--color-bg); font-weight: 600;">
-              <option value="pioneer" selected>Pioneer (Default)</option>
-              <optgroup label="DARK & NIGHT">
-                <option value="dark">Crypt Dark</option>
-                <option value="night">NASA Night Lights</option>
-                <option value="esri_dark">ESRI Dark Gray</option>
-              </optgroup>
-              <optgroup label="SATELLITE & IMAGERY">
-                <option value="satellite">ESRI Satellite</option>
-                <option value="google_sat">Google Satellite</option>
-                <option value="google_hybrid">Google Hybrid</option>
-                <option value="usgs_imagery">USGS Imagery</option>
-              </optgroup>
-              <optgroup label="STREET MAPS">
-                <option value="voyager">Clean Light (Voyager)</option>
-                <option value="osm">Standard (OSM)</option>
-                <option value="osm_fr">OSM France</option>
-                <option value="osm_ch">OSM Switzerland</option>
-                <option value="public_transport">Public Transport</option>
-              </optgroup>
-              <optgroup label="TOPOGRAPHIC">
-                <option value="terrain">OpenTopo (Terrain)</option>
-                <option value="esri_topo">ESRI Topo</option>
-                <option value="usgs_topo">USGS Topo</option>
-              </optgroup>
-              <optgroup label="OUTDOOR">
-                <option value="cyclosm">CyclOSM (Cycling)</option>
-                <option value="outdoors">Thunderforest Outdoors</option>
-              </optgroup>
-            </select>
+            <div style="display: flex; gap: var(--space-2);">
+              <select id="basemapSelect" class="jump-btn" style="flex: 1; background: var(--color-bg); font-weight: 600;">
+                <option value="pioneer" selected>Pioneer (Default)</option>
+                <optgroup label="DARK & NIGHT">
+                  <option value="dark">Crypt Dark</option>
+                  <option value="night">NASA Night Lights</option>
+                  <option value="esri_dark">ESRI Dark Gray</option>
+                </optgroup>
+                <optgroup label="SATELLITE & IMAGERY">
+                  <option value="satellite">ESRI Satellite</option>
+                  <option value="google_sat">Google Satellite</option>
+                  <option value="google_hybrid">Google Hybrid</option>
+                  <option value="usgs_imagery">USGS Imagery</option>
+                </optgroup>
+                <optgroup label="STREET MAPS">
+                  <option value="voyager">Clean Light (Voyager)</option>
+                  <option value="osm">Standard (OSM)</option>
+                  <option value="osm_fr">OSM France</option>
+                  <option value="osm_ch">OSM Switzerland</option>
+                  <option value="public_transport">Public Transport</option>
+                </optgroup>
+                <optgroup label="TOPOGRAPHIC">
+                  <option value="terrain">OpenTopo (Terrain)</option>
+                  <option value="esri_topo">ESRI Topo</option>
+                  <option value="usgs_topo">USGS Topo</option>
+                </optgroup>
+                <optgroup label="OUTDOOR">
+                  <option value="cyclosm">CyclOSM (Cycling)</option>
+                  <option value="outdoors">Thunderforest Outdoors</option>
+                </optgroup>
+              </select>
+              <button id="saveDefaultBasemapBtn" class="jump-btn" style="width: auto; padding: 0 var(--space-3); background: var(--color-primary); color: white; font-size: 10px; font-weight: 700; display: none;" title="Save as default basemap">SET DEFAULT</button>
+            </div>
           </div>
 
           <div class="legend-stack" style="margin-bottom: var(--space-4);">

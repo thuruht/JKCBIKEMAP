@@ -195,6 +195,10 @@ async function init() {
     });
   }
 
+  // Basemap Selector
+  const basemapSelect = document.getElementById('basemapSelect');
+  const saveDefaultBasemapBtn = document.getElementById('saveDefaultBasemapBtn');
+
   const checkUserAuth = async () => {
     try {
       const resp = await fetch('/api/me');
@@ -249,6 +253,9 @@ async function init() {
               localStorage.setItem('theme', data.preferences.theme);
             }
           }
+
+          // Show 'Set Default' basemap button
+          if (saveDefaultBasemapBtn) saveDefaultBasemapBtn.style.display = 'block';
           
           updateAdminUI();
         }
@@ -308,7 +315,7 @@ async function init() {
       const reader = new FileReader();
       reader.onload = async (event) => {
         try {
-          const geojson = JSON.parse(event.target.result);
+          const geojson = JSON.parse(event.target.result as string);
           if (!geojson.features || !Array.isArray(geojson.features)) throw new Error("Invalid GeoJSON: missing features array.");
           
           const token = localStorage.getItem('ADMIN_TOKEN');
@@ -415,39 +422,53 @@ async function init() {
   // Overlay Toggles
   ['railway', 'cycling_routes', 'hiking_trails'].forEach(id => {
     const el = document.getElementById(`overlay-${id}`);
-    if (el) el.addEventListener('change', (e) => toggleOverlay(id, e.target.checked));
+    if (el) el.addEventListener('change', (e) => toggleOverlay(id, (e.target as HTMLInputElement).checked));
   });
 
-  const basemapSelect = document.getElementById('basemapSelect');
   if (basemapSelect) {
-    basemapSelect.addEventListener('change', async (e) => {
-      const basemapId = e.target.value;
-      switchBasemap(basemapId);
+    basemapSelect.addEventListener('change', (e) => {
+      switchBasemap((e.target as HTMLSelectElement).value);
+    });
+  }
+
+  if (saveDefaultBasemapBtn) {
+    saveDefaultBasemapBtn.addEventListener('click', async () => {
+      const basemapId = basemapSelect ? (basemapSelect as HTMLSelectElement).value : 'pioneer';
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
       
-      // Save to KV if logged in
-      const hasSession = document.cookie.includes('session=');
-      if (hasSession) {
-        try {
-          const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-          await fetch('/api/me/preferences', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              basemap: basemapId,
-              theme: currentTheme 
-            })
-          });
-        } catch (err) {
-          console.error('Failed to save preferences:', err);
-        }
+      try {
+        saveDefaultBasemapBtn.disabled = true;
+        saveDefaultBasemapBtn.textContent = 'SAVING...';
+        
+        await fetch('/api/me/preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            basemap: basemapId,
+            theme: currentTheme 
+          })
+        });
+        
+        saveDefaultBasemapBtn.textContent = 'SAVED!';
+        setTimeout(() => {
+          saveDefaultBasemapBtn.textContent = 'SET DEFAULT';
+          saveDefaultBasemapBtn.disabled = false;
+        }, 2000);
+      } catch (err) {
+        console.error('Failed to save preferences:', err);
+        saveDefaultBasemapBtn.textContent = 'ERROR';
+        setTimeout(() => {
+          saveDefaultBasemapBtn.textContent = 'SET DEFAULT';
+          saveDefaultBasemapBtn.disabled = false;
+        }, 2000);
       }
     });
   }
 
   if (amenitiesToggle) {
     amenitiesToggle.addEventListener('change', (e) => {
-      toggleLayer('amenities', e.target.checked);
-      if (e.target.checked) fetchAmenities();
+      toggleLayer('amenities', (e.target as HTMLInputElement).checked);
+      if ((e.target as HTMLInputElement).checked) fetchAmenities();
     });
   }
 
@@ -456,7 +477,7 @@ async function init() {
     map.on('moveend', () => {
       clearTimeout(moveTimeout);
       moveTimeout = setTimeout(() => {
-        if (amenitiesToggle && amenitiesToggle.checked) fetchAmenities();
+        if (amenitiesToggle && (amenitiesToggle as HTMLInputElement).checked) fetchAmenities();
       }, 500); // 500ms debounce
     });
   }
@@ -467,8 +488,8 @@ async function init() {
     let stopDrawingFn = null;
 
     pickOnMapBtn.addEventListener('click', () => {
-      const type = document.getElementById('f_type').value;
-      const geomField = document.getElementById('f_geometry');
+      const type = (document.getElementById('f_type') as HTMLInputElement).value;
+      const geomField = document.getElementById('f_geometry') as HTMLTextAreaElement;
 
       if (type === 'point') {
         const originalText = pickOnMapBtn.textContent;
@@ -487,7 +508,7 @@ async function init() {
           },
           (finalPoints) => {
             openModal(null, 'line', true); // Re-open WITHOUT resetting form
-            document.getElementById('f_geometry').value = JSON.stringify({ type: 'LineString', coordinates: finalPoints });
+            (document.getElementById('f_geometry') as HTMLTextAreaElement).value = JSON.stringify({ type: 'LineString', coordinates: finalPoints });
             if (drawingControls) drawingControls.style.display = 'none';
           }
         );
@@ -507,32 +528,32 @@ async function init() {
     featureForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const token = localStorage.getItem('ADMIN_TOKEN');
-      const id = document.getElementById('f_id').value;
+      const id = (document.getElementById('f_id') as HTMLInputElement).value;
       
       try {
-        const geomValue = document.getElementById('f_geometry').value;
+        const geomValue = (document.getElementById('f_geometry') as HTMLTextAreaElement).value;
         if (!geomValue || geomValue === '') {
           throw new Error('Please pick a location on the map first.');
         }
 
         const data = {
-          name: document.getElementById('f_name').value,
-          feature_type: document.getElementById('f_type').value,
-          category: document.getElementById('f_category').value,
-          status: document.getElementById('f_status').value,
-          officiality: document.getElementById('f_officiality').value,
-          visibility: document.getElementById('f_visibility').value,
-          public_description: document.getElementById('f_description').value,
-          surface_note: document.getElementById('f_surface_note').value,
-          risk_note: document.getElementById('f_risk_note').value,
-          weather_sensitivity: document.getElementById('f_weather').value,
-          source_confidence: document.getElementById('f_confidence').value,
-          longevity: document.getElementById('f_longevity').value,
-          poster_email: document.getElementById('f_poster_email').value,
+          name: (document.getElementById('f_name') as HTMLInputElement).value,
+          feature_type: (document.getElementById('f_type') as HTMLInputElement).value,
+          category: (document.getElementById('f_category') as HTMLSelectElement).value,
+          status: (document.getElementById('f_status') as HTMLSelectElement).value,
+          officiality: (document.getElementById('f_officiality') as HTMLSelectElement).value,
+          visibility: (document.getElementById('f_visibility') as HTMLSelectElement).value,
+          public_description: (document.getElementById('f_description') as HTMLTextAreaElement).value,
+          surface_note: (document.getElementById('f_surface_note') as HTMLInputElement).value,
+          risk_note: (document.getElementById('f_risk_note') as HTMLInputElement).value,
+          weather_sensitivity: (document.getElementById('f_weather') as HTMLSelectElement).value,
+          source_confidence: (document.getElementById('f_confidence') as HTMLSelectElement).value,
+          longevity: (document.getElementById('f_longevity') as HTMLSelectElement).value,
+          poster_email: (document.getElementById('f_poster_email') as HTMLInputElement).value,
           geometry: JSON.parse(geomValue),
           sources: Array.from(document.querySelectorAll('.source-link-row')).map(row => ({
-            url: row.querySelector('.source-url').value,
-            note: row.querySelector('.source-note').value
+            url: (row.querySelector('.source-url') as HTMLInputElement).value,
+            note: (row.querySelector('.source-note') as HTMLInputElement).value
           })).filter(s => s.url)
         };
 
@@ -547,7 +568,7 @@ async function init() {
         }
         closeModal();
         await refreshData();
-      } catch (err) {
+      } catch (err: any) {
         alert('Error saving feature: ' + err.message);
       }
     });

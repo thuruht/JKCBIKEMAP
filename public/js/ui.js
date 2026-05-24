@@ -355,8 +355,8 @@ export function initThemeToggle() {
   const root = document.documentElement;
   const themeToggle = document.querySelector('[data-theme-toggle]');
   
-  // Default to 'light' as requested, but allow persistence
-  let theme = localStorage.getItem('theme') || 'light';
+  // Default to 'dark' as requested, but allow persistence
+  let theme = localStorage.getItem('theme') || 'dark';
   
   root.setAttribute('data-theme', theme);
   
@@ -365,8 +365,21 @@ export function initThemeToggle() {
     root.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
 
+    // Optional Basemap Synchronization
+    const syncToggle = document.getElementById('syncThemeBasemap');
+    if (syncToggle && syncToggle.checked) {
+      const basemapSelect = document.getElementById('basemapSelect');
+      if (basemapSelect) {
+        const targetBasemap = theme === 'dark' ? 'night' : 'pioneer';
+        const { switchBasemap } = await import('./map.js');
+        switchBasemap(targetBasemap);
+        basemapSelect.value = targetBasemap;
+      }
+    }
+
     // Sync to KV if logged in
     const hasSession = document.cookie.includes('session=');
+...
     if (hasSession) {
       try {
         const basemapSelect = document.getElementById('basemapSelect');

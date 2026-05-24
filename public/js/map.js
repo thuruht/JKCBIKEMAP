@@ -95,6 +95,10 @@ export function initLeafletMap(elementId, center, zoom) {
   layers.official.addTo(map);
   layers.reports.addTo(map);
   layers.amenities.addTo(map);
+
+  // Add default overlays
+  layers.cycling_routes.addTo(map);
+  layers.hiking_trails.addTo(map);
   
   return map;
 }

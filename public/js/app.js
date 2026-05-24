@@ -471,8 +471,11 @@ async function init() {
       const geomField = document.getElementById('f_geometry');
 
       if (type === 'point') {
+        const originalText = pickOnMapBtn.textContent;
+        pickOnMapBtn.textContent = 'Click on Map...';
         enableMapPicker((coords) => {
           geomField.value = JSON.stringify({ type: 'Point', coordinates: coords });
+          pickOnMapBtn.textContent = originalText;
         });
       } else {
         closeModal(); // Hide modal during drawing
@@ -483,7 +486,7 @@ async function init() {
             // Visual update only
           },
           (finalPoints) => {
-            openModal(null, 'line'); // Re-open with points
+            openModal(null, 'line', true); // Re-open WITHOUT resetting form
             document.getElementById('f_geometry').value = JSON.stringify({ type: 'LineString', coordinates: finalPoints });
             if (drawingControls) drawingControls.style.display = 'none';
           }
@@ -505,28 +508,34 @@ async function init() {
       e.preventDefault();
       const token = localStorage.getItem('ADMIN_TOKEN');
       const id = document.getElementById('f_id').value;
-      const data = {
-        name: document.getElementById('f_name').value,
-        feature_type: document.getElementById('f_type').value,
-        category: document.getElementById('f_category').value,
-        status: document.getElementById('f_status').value,
-        officiality: document.getElementById('f_officiality').value,
-        visibility: document.getElementById('f_visibility').value,
-        public_description: document.getElementById('f_description').value,
-        surface_note: document.getElementById('f_surface_note').value,
-        risk_note: document.getElementById('f_risk_note').value,
-        weather_sensitivity: document.getElementById('f_weather').value,
-        source_confidence: document.getElementById('f_confidence').value,
-        longevity: document.getElementById('f_longevity').value,
-        poster_email: document.getElementById('f_poster_email').value,
-        geometry: JSON.parse(document.getElementById('f_geometry').value),
-        sources: Array.from(document.querySelectorAll('.source-link-row')).map(row => ({
-          url: row.querySelector('.source-url').value,
-          note: row.querySelector('.source-note').value
-        })).filter(s => s.url)
-      };
-
+      
       try {
+        const geomValue = document.getElementById('f_geometry').value;
+        if (!geomValue || geomValue === '') {
+          throw new Error('Please pick a location on the map first.');
+        }
+
+        const data = {
+          name: document.getElementById('f_name').value,
+          feature_type: document.getElementById('f_type').value,
+          category: document.getElementById('f_category').value,
+          status: document.getElementById('f_status').value,
+          officiality: document.getElementById('f_officiality').value,
+          visibility: document.getElementById('f_visibility').value,
+          public_description: document.getElementById('f_description').value,
+          surface_note: document.getElementById('f_surface_note').value,
+          risk_note: document.getElementById('f_risk_note').value,
+          weather_sensitivity: document.getElementById('f_weather').value,
+          source_confidence: document.getElementById('f_confidence').value,
+          longevity: document.getElementById('f_longevity').value,
+          poster_email: document.getElementById('f_poster_email').value,
+          geometry: JSON.parse(geomValue),
+          sources: Array.from(document.querySelectorAll('.source-link-row')).map(row => ({
+            url: row.querySelector('.source-url').value,
+            note: row.querySelector('.source-note').value
+          })).filter(s => s.url)
+        };
+
         let result;
         if (id) {
           result = await updateFeature(id, data, token);

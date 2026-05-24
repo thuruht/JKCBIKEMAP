@@ -227,7 +227,7 @@ export function closeHelpModal() {
   helpModal.style.display = 'none';
 }
 
-export function openModal(f = null, type = 'point') {
+export function openModal(f = null, type = 'point', preventReset = false) {
   populateCategorySelect();
   modal.style.display = 'grid';
   if (f) {
@@ -256,7 +256,7 @@ export function openModal(f = null, type = 'point') {
       .then(data => {
         data.sources.forEach(s => addSourceLinkRow(s.source_url, s.source_note));
       });
-  } else {
+  } else if (!preventReset) {
     document.getElementById('modalTitle').textContent = `Add ${type === 'point' ? 'Point' : 'Line'}`;
     document.getElementById('f_id').value = '';
     document.getElementById('f_type').value = type;
@@ -266,12 +266,9 @@ export function openModal(f = null, type = 'point') {
     document.getElementById('f_poster_email').value = '';
     document.getElementById('f_weather').value = 'none';
     document.getElementById('f_confidence').value = 'medium';
-    document.getElementById('f_geometry').value = type === 'point' 
-      ? '{"type":"Point","coordinates":[0,0]}' 
-      : '{"type":"LineString","coordinates":[[0,0],[0,0]]}';
+    document.getElementById('f_geometry').value = '';
     document.getElementById('sourceLinksList').innerHTML = '';
   }
-
   // Handle source link adding
   const addSourceBtn = document.getElementById('addSourceLinkBtn');
   addSourceBtn.onclick = () => addSourceLinkRow();

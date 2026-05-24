@@ -35,7 +35,8 @@ export default {
     // Serve static assets with CSP
     const response = await env.ASSETS.fetch(request);
     const newHeaders = new Headers(response.headers);
-    newHeaders.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org https://*.vis.earthdata.nasa.gov https://*.arcgisonline.com https://*.tile-cyclosm.openstreetmap.fr https://mt1.google.com https://*.tile.thunderforest.com https://*.tile.openstreetmap.fr https://tile.osm.ch https://tile.memomaps.de https://*.tiles.openrailwaymap.org https://tile.waymarkedtrails.org; connect-src 'self' https://overpass-api.de;");
+    const csp = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org https://*.vis.earthdata.nasa.gov https://*.arcgisonline.com https://*.tile-cyclosm.openstreetmap.fr https://mt1.google.com https://*.tile.thunderforest.com https://*.tile.openstreetmap.fr https://tile.osm.ch https://tile.memomaps.de https://*.tiles.openrailwaymap.org https://tile.waymarkedtrails.org; connect-src 'self' https://overpass-api.de https://nominatim.openstreetmap.org;";
+    newHeaders.set("Content-Security-Policy", csp);
     
     return new Response(response.body, {
       status: response.status,
@@ -122,14 +123,14 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
 }
 
 async function handleMarcImport(env: Env): Promise<Response> {
-  const MARC_URL = 'https://marc2.org/arcgis/rest/services/MetroGreen/FeatureServer/0/query?where=PhaseSimple=%27Existing%27&outFields=*&f=geojson';
-  
+  const MARC_URL = 'https://maps.marc.org/arcgis/rest/services/Recreation/BikewaysAndTrails/MapServer/10/query?where=1%3D1&outFields=*&f=geojson';
+
   try {
     console.log("Fetching MARC data from:", MARC_URL);
     const resp = await fetch(MARC_URL);
     if (!resp.ok) return new Response(`Failed to fetch MARC data: ${resp.status}`, { status: 500 });
     const data = await resp.json() as any;
-    
+
     if (!data.features) {
       console.error("MARC Data missing features array:", data);
       return new Response("MARC Data missing features", { status: 500 });
@@ -139,27 +140,32 @@ async function handleMarcImport(env: Env): Promise<Response> {
     for (const feature of data.features) {
       const props = feature.properties;
       const geom = feature.geometry;
-      const name = props.Name || 'Unnamed Trail';
+      // MARC property names can vary, try a few common ones
+      const name = props.RouteName || props.Name || props.TrailName || 'Unnamed MARC Trail';
+      const jurisdiction = props.Jurisdiction || props.City || 'Regional';
+      const facility = props.FacilityType || props.Type || 'Trail';
+      const surface = props.SurfaceType || props.Surface || 'Unknown';
+
       const slug = 'marc-' + crypto.randomUUID();
       const id = crypto.randomUUID();
-      
+
       try {
         await env.DB.prepare(`
           INSERT OR IGNORE INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(id, slug, name, 'line', 'Official Regional Data', 'active', 'public', 'official', 
-          `Jurisdiction: ${props.Jurisdiction || 'Unknown'}. Type: ${props.FacilityType || 'Unknown'}.`, 
-          props.SurfaceType || 'Unknown').run();
+        `).bind(id, slug, name, 'line', 'Official Regional Data', 'active', 'public', 'official',
+          `Jurisdiction: ${jurisdiction}. Type: ${facility}.`,
+          surface).run();
 
         await env.DB.prepare("INSERT OR IGNORE INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
           .bind(id, JSON.stringify(geom)).run();
-        
+
         count++;
       } catch (dbErr: any) {
         console.error(`DB Error on feature ${name}:`, dbErr.message);
       }
 
-      if (count >= 300) break;
+      if (count >= 500) break; // Increased limit slightly
     }
     return new Response(`Imported ${count} features`, { status: 200 });
   } catch (err: any) {
@@ -167,7 +173,6 @@ async function handleMarcImport(env: Env): Promise<Response> {
     return new Response(`Critical Error: ${err.message}`, { status: 500 });
   }
 }
-
 async function handleApiRequest(request: Request, env: Env, url: URL): Promise<Response> {
   const method = request.method;
   const path = url.pathname.replace("/api/", "");
@@ -473,7 +478,7 @@ function jsonResponse(data: any, status = 200): Response {
     headers: { 
       "Content-Type": "application/json", 
       "Access-Control-Allow-Origin": "*",
-      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org; connect-src 'self' https://overpass-api.de;"
+      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org https://*.vis.earthdata.nasa.gov https://*.arcgisonline.com https://*.tile-cyclosm.openstreetmap.fr https://mt1.google.com https://*.tile.thunderforest.com https://*.tile.openstreetmap.fr https://tile.osm.ch https://tile.memomaps.de https://*.tiles.openrailwaymap.org https://tile.waymarkedtrails.org; connect-src 'self' https://overpass-api.de https://nominatim.openstreetmap.org;"
     },
   });
 }

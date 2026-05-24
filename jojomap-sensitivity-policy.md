@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Jojo's KC Bike Map is valuable because it captures route knowledge that standard maps ignore. Some of that knowledge lives in a legal, informal, or situational gray area. The goal is to preserve useful rider intelligence without unnecessarily exposing fragile shortcuts or access points.
+Jojo's KC Bike Map is valuable because it captures route knowledge that standard maps ignore. Some of that knowledge lives in a legal, informal, or situational gray area. The goal is to preserve useful rider knowledge without unnecessarily exposing fragile shortcuts or access points.
 
 ## Classification levels
 

@@ -67,7 +67,7 @@ const basemaps = {
 };
 
 let layers = {
-  intel: L.layerGroup(),
+  knowledge: L.layerGroup(),
   official: L.layerGroup(),
   reports: L.layerGroup(),
   amenities: L.layerGroup(),
@@ -91,7 +91,7 @@ export function initLeafletMap(elementId, center, zoom) {
   currentBasemap.addTo(map);
   
   // Add feature layers to map
-  layers.intel.addTo(map);
+  layers.knowledge.addTo(map);
   layers.official.addTo(map);
   layers.reports.addTo(map);
   layers.amenities.addTo(map);
@@ -182,7 +182,7 @@ export function renderMap(features, allFeaturesCount, onFeatureClick, onMarkerDr
     if (!f.geometry) return;
     const geom = f.geometry;
     
-    let targetGroup = layers.intel;
+    let targetGroup = layers.knowledge;
     if (f.category === 'Official Regional Data') {
       targetGroup = layers.official;
     } else if (f.category === 'Field Reports') {

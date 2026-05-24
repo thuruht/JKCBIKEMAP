@@ -16,7 +16,7 @@ CREATE TABLE checkpoints (
 INSERT INTO badges (id, name, description) VALUES 
 ('river-crosser', 'River Crosser', 'Verified passage across a major walking bridge.'),
 ('trail-veteran', 'Trail Pioneer', 'Logged 10+ checkpoints on primary trail spines.'),
-('intel-validator', 'Intel Validator', 'Verified the accuracy of an informal connector.'),
+('intel-validator', 'Knowledge Validator', 'Verified the accuracy of an informal connector.'),
 ('media-node', 'Media Node', 'Attached high-fidelity media to a feature.');
 
 -- Update Terminology

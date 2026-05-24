@@ -122,7 +122,7 @@ async function init() {
 
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(async () => {
-        // 1. Filter Local Intel
+        // 1. Filter Local Knowledge
         const filtered = allFeatures.filter(f =>
           f.name.toLowerCase().includes(q) ||
           (f.public_description && f.public_description.toLowerCase().includes(q)) ||
@@ -218,7 +218,7 @@ async function init() {
             const xpInLevel = score % 50;
             const progress = (xpInLevel / 50) * 100;
 
-            const levelNames = ['SCOUT', 'PATHFINDER', 'EXPLORER', 'CHART-MASTER', 'INTEL-NODE', 'TRAIL-WIZARD', 'TERRAIN-GURU', 'MAP-VANGUARD', 'DATA-ELITE', 'LOCAL LEGEND'];
+            const levelNames = ['SCOUT', 'PATHFINDER', 'EXPLORER', 'CHART-MASTER', 'KNOWLEDGE-NODE', 'TRAIL-WIZARD', 'TERRAIN-GURU', 'MAP-VANGUARD', 'DATA-ELITE', 'LOCAL LEGEND'];
             const levelName = levelNames[Math.min(level - 1, 9)];
 
             if (levelEl) levelEl.textContent = `LEVEL ${level} ${levelName}`;
@@ -237,10 +237,17 @@ async function init() {
             }
           }
 
-          // Apply saved basemap preference
-          if (data.preferences && data.preferences.basemap) {
-            switchBasemap(data.preferences.basemap);
-            if (basemapSelect) basemapSelect.value = data.preferences.basemap;
+          // Apply saved preferences (basemap, theme)
+          if (data.preferences) {
+            if (data.preferences.basemap) {
+              switchBasemap(data.preferences.basemap);
+              if (basemapSelect) basemapSelect.value = data.preferences.basemap;
+            }
+            if (data.preferences.theme) {
+              const root = document.documentElement;
+              root.setAttribute('data-theme', data.preferences.theme);
+              localStorage.setItem('theme', data.preferences.theme);
+            }
           }
           
           updateAdminUI();
@@ -396,12 +403,12 @@ async function init() {
   if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal);
 
   // Layer Toggles
-  const intelToggle = document.getElementById('layer-intel');
+  const knowledgeToggle = document.getElementById('layer-knowledge');
   const officialToggle = document.getElementById('layer-official');
   const reportsToggle = document.getElementById('layer-reports');
   const amenitiesToggle = document.getElementById('layer-amenities');
 
-  if (intelToggle) intelToggle.addEventListener('change', (e) => toggleLayer('intel', e.target.checked));
+  if (knowledgeToggle) knowledgeToggle.addEventListener('change', (e) => toggleLayer('knowledge', e.target.checked));
   if (officialToggle) officialToggle.addEventListener('change', (e) => toggleLayer('official', e.target.checked));
   if (reportsToggle) reportsToggle.addEventListener('change', (e) => toggleLayer('reports', e.target.checked));
 
@@ -421,10 +428,14 @@ async function init() {
       const hasSession = document.cookie.includes('session=');
       if (hasSession) {
         try {
+          const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
           await fetch('/api/me/preferences', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ basemap: basemapId })
+            body: JSON.stringify({ 
+              basemap: basemapId,
+              theme: currentTheme 
+            })
           });
         } catch (err) {
           console.error('Failed to save preferences:', err);

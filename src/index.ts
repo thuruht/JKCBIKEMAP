@@ -265,7 +265,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         admin_geometry: isAdmin ? f.admin_geometry : undefined,
         geometry: geometry ? JSON.parse(geometry as string) : null,
         // Restrict sensitive metadata to high-rep users
-        public_description: (isSensitive && !hasFullAccess) ? "Detailed intelligence restricted to established contributors." : f.public_description,
+        public_description: (isSensitive && !hasFullAccess) ? "Detailed knowledge restricted to established contributors." : f.public_description,
         admin_note: isAdmin ? f.admin_note : undefined,
         surface_note: (isSensitive && !hasFullAccess) ? null : f.surface_note
       };

@@ -1,7 +1,7 @@
 # Jojo's KC Bike Map — Technical Summary & Feature Guide
 
 ## Project Identity
-A high-fidelity rider intelligence tool for the Kansas City metro. Unlike generic maps, this project prioritizes **actual rideability**, informal connectors, and real-time community conditions.
+A high-fidelity rider knowledge tool for the Kansas City metro. Unlike generic maps, this project prioritizes **actual rideability**, informal connectors, and real-time community conditions.
 
 ## Key Features
 
@@ -11,7 +11,7 @@ A high-fidelity rider intelligence tool for the Kansas City metro. Unlike generi
 - **Rider-First Design:** Large hit areas for mobile/glove-friendly navigation and high-contrast typography (`Instrument Serif`).
 - **#RRGGBBAA Standard:** All colors across CSS and JavaScript use the strict 8-digit hex format for precision and consistency.
 
-### 2. Community Intelligence (Field Reports)
+### 2. Community Knowledge (Field Reports)
 - **Dual Longevity:**
     - **Temporary Alerts:** (e.g., Mud, Flooding) Fade out over 48 hours using **Time-based Decay** logic to keep data fresh.
     - **Permanent Infrastructure:** (e.g., Missing Sidewalk) Stays visible until resolved.
@@ -22,7 +22,7 @@ A high-fidelity rider intelligence tool for the Kansas City metro. Unlike generi
 
 ### 3. Integrated Regional Data
 - **MARC Integration:** Direct import pipeline from the Mid-America Regional Council (MARC) Regional Trails ArcGIS API.
-- **Layer Toggles:** Users can toggle between **Rider Intel**, **Official Regional Data**, **Field Reports**, and **Rider Amenities**.
+- **Layer Toggles:** Users can toggle between **Rider Knowledge**, **Official Regional Data**, **Field Reports**, and **Rider Amenities**.
 - **Amenities Layer (OSM):** Live Overpass API integration to fetch water fountains, repair stations, and bike shops based on the current map view.
 
 ## Architecture (Cloudflare Stack)

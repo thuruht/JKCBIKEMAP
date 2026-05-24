@@ -1,6 +1,6 @@
 # Jojo's KC Bike Map
 
-A production-ready web app for Kansas City metro bike mapping, centered on real rider intelligence.
+A production-ready web app for Kansas City metro bike mapping, centered on local rider knowledge.
 
 ## Tech Stack
 
@@ -80,7 +80,7 @@ Then enter this token when prompted by the "Login as Admin" button in the app.
 
 ## Features
 
-- **Corridor-based mapping:** Focuses on rider intelligence and connections.
+- **Corridor-based mapping:** Focuses on rider knowledge and connections.
 - **Dynamic API:** Fetches features, search results, and reports from D1.
 - **"Crypt" Aesthetic:** GSAP-animated grid and UI polish for a high-fidelity feel.
 - **Enhanced Reporting:** Dual-longevity system with 48-hour decay for temporary alerts.

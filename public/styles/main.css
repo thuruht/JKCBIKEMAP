@@ -6,9 +6,9 @@
   --text-xl: clamp(2rem, 1.8rem + 2vw, 3rem);
   --space-1: 0.35rem; --space-2: 0.65rem; --space-3: 1rem; --space-4: 1.25rem;
   --space-5: 1.5rem; --space-6: 2rem; --space-8: 2.5rem; --space-10: 3.5rem; --space-12: 4.5rem;
-  --color-bg:rgb(155, 142, 93); --color-surface:rgb(173, 165, 141); --color-surface-2:rgb(141, 141, 137); --color-surface-offset:#edeae5ff;
-  --color-border:rgb(95, 76, 32); --color-text:rgb(37, 32, 5); --color-text-muted:#42403bff; --color-text-faint:rgb(61, 57, 46);
-  --color-primary:#01696fff; --color-primary-soft:rgb(126, 160, 122); --color-card:#f9f8f5f2;
+  --color-bg:#f4f0e6; --color-surface:#e9e4d7; --color-surface-2:#e2ddd0; --color-surface-offset:#ffffff;
+  --color-border:#d0c8b0; --color-text:#333333; --color-text-muted:#555555; --color-text-faint:#777777;
+  --color-primary:#7a9a8c; --color-primary-soft:rgba(122, 154, 140, 0.2); --color-card:rgba(244, 240, 230, 0.95);
   --shadow-sm:0 2px 4px #1a19141f; --shadow-md:0 16px 48px #1a19142e;
   --radius-md:1rem; --radius-lg:1.5rem; --radius-full:999px;
   --font-display:'Instrument Serif', Georgia, serif; --font-body:'Work Sans', Arial, sans-serif;

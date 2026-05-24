@@ -31,7 +31,7 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
     <div style="margin-bottom: var(--space-4);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
         <small>${f.category}</small>
-        ${(isAdmin && f.id) ? `<button class="jump-btn" id="editFeatureBtn" style="padding: 2px 8px; font-size: 10px; background: var(--color-surface-offset);">Edit Intelligence</button>` : ''}
+        ${(isAdmin && f.id) ? `<button class="jump-btn" id="editFeatureBtn" style="padding: 2px 8px; font-size: 10px; background: var(--color-surface-offset);">Edit Knowledge</button>` : ''}
       </div>
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3);">
         <h3 style="margin: 0; line-height: 1.1; flex: 1;">${catIcon} ${f.name}</h3>
@@ -48,7 +48,7 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
     </div>
 
     <div style="font-size: var(--text-base); line-height: 1.5; color: var(--color-text); margin-bottom: var(--space-5); font-weight: 500;">
-      ${f.public_description || 'No detailed intel provided yet.'}
+      ${f.public_description || 'No detailed knowledge provided yet.'}
     </div>
 
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); border-top: 1px solid var(--color-border); padding-top: var(--space-4); margin-bottom: var(--space-4);">
@@ -77,7 +77,7 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
     </div>` : ''}
 
     <div id="featureDetailsAsync" style="margin-top: var(--space-4); border-top: 1px solid var(--color-border); padding-top: var(--space-4);">
-      <div style="font-size: 10px; opacity: 0.5;">Loading community intel...</div>
+      <div style="font-size: 10px; opacity: 0.5;">Loading community knowledge...</div>
     </div>
   `;
 
@@ -143,7 +143,7 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
       })
       .catch(e => {
         const detailsDiv = document.getElementById('featureDetailsAsync');
-        if (detailsDiv) detailsDiv.innerHTML = '<div style="font-size:10px; color:red;">Failed to load intel.</div>';
+        if (detailsDiv) detailsDiv.innerHTML = '<div style="font-size:10px; color:red;">Failed to load knowledge.</div>';
       });
   } else if (f.id && f.id.startsWith('marc-')) {
     const detailsDiv = document.getElementById('featureDetailsAsync');
@@ -357,13 +357,35 @@ export function renderLegend(features, containerElement, onFeatureJump) {
 export function initThemeToggle() {
   const root = document.documentElement;
   const themeToggle = document.querySelector('[data-theme-toggle]');
-  let theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  
+  // Default to 'light' as requested, but allow persistence
+  let theme = localStorage.getItem('theme') || 'light';
   
   root.setAttribute('data-theme', theme);
   
-  themeToggle.addEventListener('click', () => {
+  themeToggle.addEventListener('click', async () => {
     theme = theme === 'dark' ? 'light' : 'dark';
     root.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+
+    // Sync to KV if logged in
+    const hasSession = document.cookie.includes('session=');
+    if (hasSession) {
+      try {
+        const basemapSelect = document.getElementById('basemapSelect');
+        const currentBasemap = basemapSelect ? basemapSelect.value : 'pioneer';
+        await fetch('/api/me/preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            theme: theme,
+            basemap: currentBasemap 
+          })
+        });
+      } catch (err) {
+        console.error('Failed to sync theme preference:', err);
+      }
+    }
   });
 
   // Global Escape key to close modals

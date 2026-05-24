@@ -23,5 +23,5 @@ INSERT INTO badges (id, name, description) VALUES
 ('bridge-hunter', 'Bridge Hunter', 'Contributed data on a pedestrian bridge.'),
 ('mud-finder', 'Mud Finder', 'Submitted a field report about trail conditions.'),
 ('trail-pioneer', 'Trail Pioneer', 'Mapped a new primary trail spine.'),
-('night-rider', 'Night Rider', 'Contributed intel from a night-time perspective.'),
-('local-legend', 'Local Legend', 'Reached Level 10 through consistent high-quality intel.');
+('night-rider', 'Night Rider', 'Contributed knowledge from a night-time perspective.'),
+('local-legend', 'Local Legend', 'Reached Level 10 through consistent high-quality knowledge.');

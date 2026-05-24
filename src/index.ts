@@ -53,6 +53,8 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
 
   if (method === "POST" && path === "login") {
     const { email } = await request.json() as { email: string };
+    if (!email) return jsonResponse({ error: "Email required" }, 400);
+
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 mins
     
@@ -61,38 +63,27 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
 
     const loginUrl = `${env.APP_URL || url.origin}/auth/verify?token=${token}`;
     
-    if (true) { // Use MailChannels for better reliability on Workers
-      try {
-        const resp = await fetch("https://api.mailchannels.net/tx/v1/send", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            personalizations: [{ to: [{ email }] }],
-            from: { email: "no-reply@jojomap.kcmo.xyz", name: "Jojo's KC Bike Map" },
-            subject: "Your Magic Login Link",
-            content: [
-              { type: "text/plain", value: `Click here to login: ${loginUrl}` },
-              { type: "text/html", value: `<p>Click here to login: <a href="${loginUrl}">${loginUrl}</a></p>` }
-            ]
-          })
+    try {
+      if (env.SEND_EMAIL) {
+        // Native Cloudflare Email Sending (requires domain onboarded)
+        await env.SEND_EMAIL.send({
+          from: "whatvr@jojomap.kcmo.xyz",
+          to: [email],
+          subject: "Your Magic Login Link",
+          text: `Click here to login: ${loginUrl}`,
+          html: `<p>Click here to login: <a href="${loginUrl}">${loginUrl}</a></p>`
         });
-        
-        if (resp.ok) {
-          console.log(`Magic Link sent to ${email} via MailChannels`);
-        } else {
-          const errorText = await resp.text();
-          throw new Error(`MailChannels failed: ${errorText}`);
-        }
-      } catch (err: any) {
-        console.error("Email Sending failed:", err.message);
-        // Fallback log for dev visibility
-        console.log(`EMERGENCY ACCESS LINK: ${loginUrl}`);
+        console.log(`Magic Link sent to ${email} via Cloudflare Email Sending`);
+        return jsonResponse({ success: true });
+      } else {
+        throw new Error("SEND_EMAIL binding missing");
       }
-    } else {
-      console.log(`MAGIC LINK (No Email Binding): ${loginUrl}`);
+    } catch (err: any) {
+      console.error("Email Sending failed:", err.message);
+      // Fallback log for dev visibility
+      console.log(`EMERGENCY ACCESS LINK: ${loginUrl}`);
+      return jsonResponse({ error: "Failed to send email", link: loginUrl }, 500);
     }
-
-    return jsonResponse({ success: true });
   }
 
   if (method === "GET" && path === "verify") {

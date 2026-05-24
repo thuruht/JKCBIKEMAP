@@ -97,6 +97,7 @@
       <div id="map" aria-label="JOJO's KC BIKE MAP'"></div>
       <div class="floating">
         <div class="card" id="infoCard">
+          <button id="closeInfoCard" style="position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 999px; background: var(--color-surface-offset); display: grid; place-items: center; font-size: 16px; color: var(--color-text-faint); border: 1px solid var(--color-border); cursor: pointer; z-index: 1010;">×</button>
           <h3>How to use this</h3>
           <p>Think in corridors, not perfect routes. Brush Creek is your east-west spine; Blue River is your north-south spine; parks, bridges, and neighborhoods help you stitch the rest together.</p>
           <p class="note">Hand-built exploration map, not turn-by-turn navigation. Routes and conditions subject to rain, mud, snow, flooding, stray dogs, automobile traffic, law enforcement and other hazards - be cautious!</p>
@@ -297,7 +298,16 @@
 
     const root = document.documentElement;
     const themeToggle = document.querySelector('[data-theme-toggle]');
-    let theme = localStorage.getItem('theme') || 'light';
+    const infoCard = document.getElementById('infoCard');
+    const closeInfoCardBtn = document.getElementById('closeInfoCard');
+
+    if (closeInfoCardBtn && infoCard) {
+      closeInfoCardBtn.addEventListener('click', () => {
+        infoCard.style.display = 'none';
+      });
+    }
+
+    let theme = localStorage.getItem('theme') || 'dark';
     root.setAttribute('data-theme', theme);
     themeToggle.addEventListener('click', async () => {
       theme = theme === 'dark' ? 'light' : 'dark';

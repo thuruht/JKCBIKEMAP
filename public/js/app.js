@@ -417,6 +417,12 @@ async function init() {
   if (addPointBtn) addPointBtn.addEventListener('click', () => openModal(null, 'point'));
   if (addLineBtn) addLineBtn.addEventListener('click', () => openModal(null, 'line'));
   if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal);
+  const closeInfoCardBtn = document.getElementById('closeInfoCard');
+  if (closeInfoCardBtn && infoCard) {
+    closeInfoCardBtn.addEventListener('click', () => {
+      infoCard.style.display = 'none';
+    });
+  }
 
   // Layer Toggles
   const knowledgeToggle = document.getElementById('layer-knowledge');

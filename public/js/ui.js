@@ -28,7 +28,6 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
                   f.category === 'Key parks' ? '🌳' : '📍';
 
   content.innerHTML = `
-    <button id="closeInfoCard" style="position: absolute; top: 12px; right: 12px; width: 24px; height: 24px; border-radius: 999px; background: var(--color-surface-offset); display: grid; place-items: center; font-size: 14px; color: var(--color-text-faint); border: 1px solid var(--color-border); cursor: pointer; z-index: 10;">×</button>
     <div style="margin-bottom: var(--space-4); padding-right: 20px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
         <small>${f.category}</small>
@@ -195,10 +194,6 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
       }
     };
   }
-
-  document.getElementById('closeInfoCard').onclick = () => {
-    infoCardElement.style.display = 'none';
-  };
 }
 
 export function switchTab(tabId) {

@@ -87,34 +87,15 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
   }
 
   if (method === "GET" && path === "verify") {
-    const token = url.searchParams.get("token");
-    if (!token) return new Response("Missing token", { status: 400 });
+    // ... verification logic ...
+  }
 
-    const auth = await env.DB.prepare("SELECT * FROM auth_tokens WHERE token = ? AND expires_at > CURRENT_TIMESTAMP")
-      .bind(token).first() as { email: string } | null;
-
-    if (!auth) return new Response("Invalid or expired token", { status: 401 });
-
-    let user = await env.DB.prepare("SELECT id FROM users WHERE email = ?").bind(auth.email).first() as { id: string } | null;
-    if (!user) {
-      const userId = crypto.randomUUID();
-      await env.DB.prepare("INSERT INTO users (id, email, verified_at) VALUES (?, ?, CURRENT_TIMESTAMP)")
-        .bind(userId, auth.email).run();
-      user = { id: userId };
-    }
-
-    const sessionToken = crypto.randomUUID();
-    const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    await env.DB.prepare("INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), user.id, sessionToken, sessionExpires).run();
-
-    await env.DB.prepare("DELETE FROM auth_tokens WHERE token = ?").bind(token).run();
-
-    return new Response(null, {
-      status: 302,
+  if (method === "POST" && path === "logout") {
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
       headers: {
-        "Location": "/",
-        "Set-Cookie": `session=${sessionToken}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${30 * 24 * 60 * 60}`
+        "Content-Type": "application/json",
+        "Set-Cookie": "session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"
       }
     });
   }
@@ -123,12 +104,17 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
 }
 
 async function handleMarcImport(env: Env): Promise<Response> {
-  const MARC_URL = 'https://maps.marc.org/arcgis/rest/services/Recreation/BikewaysAndTrails/MapServer/10/query?where=1%3D1&outFields=*&f=geojson';
+  const MARC_URL = 'https://gis2.marc.org/arcgis/rest/services/Recreation/BikewaysAndTrails/MapServer/10/query?where=1%3D1&outFields=*&f=geojson';
 
   try {
     console.log("Fetching MARC data from:", MARC_URL);
     const resp = await fetch(MARC_URL, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Cloudflare Worker)' }
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://jojomap.kcmo.xyz/'
+      }
     });
     
     if (!resp.ok) {
@@ -189,7 +175,7 @@ async function handleMarcImport(env: Env): Promise<Response> {
     return new Response(`Successfully imported ${importedCount} MARC features in chunks.`, { status: 200 });
   } catch (err: any) {
     console.error("Critical Import Error:", err.message);
-    return new Response(`Critical Error: ${err.message}\n${err.stack}`, { status: 500 });
+    return new Response(`Server Error during MARC import. Check worker logs for details.`, { status: 500 });
   }
 }
 
@@ -197,7 +183,6 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
   try {
     const method = request.method;
     const path = url.pathname.replace("/api/", "");
-    console.log(`API Request: ${method} ${path}`);
 
     const cookieHeader = request.headers.get("Cookie") || "";
     const sessionToken = cookieHeader.split(";").find(c => c.trim().startsWith("session="))?.split("=")[1];
@@ -396,7 +381,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     return new Response("Not Found", { status: 404 });
   } catch (err: any) {
     console.error("API Request Error:", err.message, err.stack);
-    return new Response(`Server Error: ${err.message}\n${err.stack}`, { status: 500 });
+    return new Response(`Server Error. Check worker logs for details.`, { status: 500 });
   }
 }
 

@@ -72,7 +72,6 @@ async function handleMarkerDrag(feature, newCoords) {
   try {
     const updated = { ...feature, geometry: { type: 'Point', coordinates: newCoords } };
     await updateFeature(feature.id, updated, token);
-    console.log(`Updated position for ${feature.name}`);
   } catch (err) {
     alert('Failed to update marker position: ' + err.message);
   }
@@ -184,11 +183,22 @@ async function init() {
     });
   }
 
+  const doLogout = async () => {
+    try {
+      await fetch('/auth/logout', { method: 'POST' });
+    } catch (e) {
+      console.warn('Server logout failed, clearing locally');
+    }
+    localStorage.removeItem('ADMIN_TOKEN');
+    document.cookie = "session=; Max-Age=0; path=/; SameSite=Strict;";
+    location.reload();
+  };
+
   if (submitLoginBtn) {
     submitLoginBtn.addEventListener('click', () => {
       const token = adminTokenInput.value;
       if (token) {
-        localStorage.setItem('ADMIN_TOKEN', token);
+        localStorage.setItem('ADMIN_TOKEN', token.trim());
         isAdmin = true;
         adminTokenInput.value = '';
         updateAdminUI();
@@ -197,11 +207,7 @@ async function init() {
   }
 
   if (logoutBtn) {
-    logoutBtn.addEventListener('click', () => {
-      localStorage.removeItem('ADMIN_TOKEN');
-      isAdmin = false;
-      updateAdminUI();
-    });
+    logoutBtn.addEventListener('click', doLogout);
   }
 
   // Basemap Selector
@@ -298,12 +304,18 @@ async function init() {
     });
   }
 
-  if (userLogoutBtn) {
-    userLogoutBtn.addEventListener('click', () => {
-      document.cookie = "session=; Max-Age=0; path=/;";
-      location.reload();
-    });
-  }
+  const doLogout = async () => {
+    try {
+      await fetch('/auth/logout', { method: 'POST' });
+    } catch (e) {
+      console.warn('Server logout failed, clearing locally');
+    }
+    localStorage.removeItem('ADMIN_TOKEN');
+    document.cookie = "session=; Max-Age=0; path=/; SameSite=Strict;";
+    location.reload();
+  };
+
+  if (userLogoutBtn) userLogoutBtn.addEventListener('click', doLogout);
 
   checkUserAuth();
 

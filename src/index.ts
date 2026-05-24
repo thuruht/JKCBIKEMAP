@@ -35,7 +35,8 @@ export default {
     // Serve static assets with CSP
     const response = await env.ASSETS.fetch(request);
     const newHeaders = new Headers(response.headers);
-    const csp = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org https://*.vis.earthdata.nasa.gov https://*.arcgisonline.com https://*.tile-cyclosm.openstreetmap.fr https://mt1.google.com https://*.tile.thunderforest.com https://*.tile.openstreetmap.fr https://tile.osm.ch https://tile.memomaps.de https://*.tiles.openrailwaymap.org https://tile.waymarkedtrails.org; connect-src 'self' https://overpass-api.de https://nominatim.openstreetmap.org;";
+    // Relaxed CSP to allow internal scripts, Leaflet, GSAP, and Cloudflare Analytics
+    const csp = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org https://*.vis.earthdata.nasa.gov https://*.arcgisonline.com https://*.tile-cyclosm.openstreetmap.fr https://mt1.google.com https://*.tile.thunderforest.com https://*.tile.openstreetmap.fr https://tile.osm.ch https://tile.memomaps.de https://*.tiles.openrailwaymap.org https://tile.waymarkedtrails.org; connect-src 'self' https://overpass-api.de https://nominatim.openstreetmap.org https://cloudflareinsights.com https://*.cloudflareinsights.com;";
     newHeaders.set("Content-Security-Policy", csp);
     
     return new Response(response.body, {
@@ -52,16 +53,14 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
 
   if (method === "POST" && path === "login") {
     const { email } = await request.json() as { email: string };
-    if (!email) return jsonResponse({ error: "Email required" }, 400);
-
     const token = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 mins
+    
     await env.DB.prepare("INSERT INTO auth_tokens (token, email, expires_at) VALUES (?, ?, ?)")
       .bind(token, email, expiresAt).run();
 
     const loginUrl = `${env.APP_URL || url.origin}/auth/verify?token=${token}`;
-
+    
     if (true) { // Use MailChannels for better reliability on Workers
       try {
         const resp = await fetch("https://api.mailchannels.net/tx/v1/send", {
@@ -93,7 +92,7 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
       console.log(`MAGIC LINK (No Email Binding): ${loginUrl}`);
     }
 
-    return jsonResponse({ success: true, message: "Magic link sent" });
+    return jsonResponse({ success: true });
   }
 
   if (method === "GET" && path === "verify") {
@@ -105,7 +104,7 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
 
     if (!auth) return new Response("Invalid or expired token", { status: 401 });
 
-    let user = await env.DB.prepare("SELECT * FROM users WHERE email = ?").bind(auth.email).first() as { id: string } | null;
+    let user = await env.DB.prepare("SELECT id FROM users WHERE email = ?").bind(auth.email).first() as { id: string } | null;
     if (!user) {
       const userId = crypto.randomUUID();
       await env.DB.prepare("INSERT INTO users (id, email, verified_at) VALUES (?, ?, CURRENT_TIMESTAMP)")
@@ -155,7 +154,7 @@ async function handleMarcImport(env: Env): Promise<Response> {
       const jurisdiction = props.Jurisdiction || props.City || 'Regional';
       const facility = props.FacilityType || props.Type || 'Trail';
       const surface = props.SurfaceType || props.Surface || 'Unknown';
-
+      
       const slug = 'marc-' + crypto.randomUUID();
       const id = crypto.randomUUID();
 
@@ -183,67 +182,68 @@ async function handleMarcImport(env: Env): Promise<Response> {
     return new Response(`Critical Error: ${err.message}`, { status: 500 });
   }
 }
+
 async function handleApiRequest(request: Request, env: Env, url: URL): Promise<Response> {
   const method = request.method;
   const path = url.pathname.replace("/api/", "");
 
   const cookieHeader = request.headers.get("Cookie") || "";
-  const sessionToken = cookieHeader.match(/session=([^;]+)/)?.[1];
+  const sessionToken = cookieHeader.split("; ").find(c => c.startsWith("session="))?.split("=")[1];
   
-  let user: { id: string, email: string, role: string } | null = null;
+  let user: any = null;
+  let isAdmin = false;
+
   if (sessionToken) {
-    user = await env.DB.prepare(`
-      SELECT u.* FROM users u 
-      JOIN sessions s ON u.id = s.user_id 
+    const session = await env.DB.prepare(`
+      SELECT s.*, u.email, u.role, u.reputation_score
+      FROM sessions s
+      JOIN users u ON s.user_id = u.id
       WHERE s.token = ? AND s.expires_at > CURRENT_TIMESTAMP
-    `).bind(sessionToken).first() as any;
-  }
-
-  const authHeader = request.headers.get("Authorization");
-  const isAdmin = (env.ADMIN_TOKEN && authHeader === `Bearer ${env.ADMIN_TOKEN}`) || (user && user.role === 'admin');
-
-  if (method !== "GET" && !user && !isAdmin) {
-    return jsonResponse({ error: "Authentication required" }, 401);
+    `).bind(sessionToken).first();
+    
+    if (session) {
+      user = session;
+      isAdmin = session.role === 'admin';
+    }
   }
 
   if (method === "GET" && path === "me") {
-    if (!user) return jsonResponse({ authenticated: false }, 401);
-    const prefs = await env.KV.get(`prefs:${user.id}`);
+    if (!user) return jsonResponse({ authenticated: false });
     
-    // Fetch level and badges
-    const userStats = await env.DB.prepare("SELECT reputation_score, contributor_level FROM users WHERE id = ?").bind(user.id).first() as any;
-    const { results: badges } = await env.DB.prepare(`
-      SELECT b.* FROM badges b 
-      JOIN user_badges ub ON b.id = ub.badge_id 
+    const badges = await env.DB.prepare(`
+      SELECT b.* FROM badges b
+      JOIN user_badges ub ON b.id = ub.badge_id
       WHERE ub.user_id = ?
-    `).bind(user.id).all();
+    `).bind(user.user_id).all();
 
-    return jsonResponse({ 
-      authenticated: true, 
-      user: { ...user, ...userStats }, 
-      badges: badges || [],
-      preferences: prefs ? JSON.parse(prefs) : {} 
+    const prefsRaw = await env.KV.get(`prefs:${user.user_id}`);
+    const preferences = prefsRaw ? JSON.parse(prefsRaw) : {};
+
+    return jsonResponse({
+      authenticated: true,
+      user: {
+        email: user.email,
+        role: user.role,
+        reputation_score: user.reputation_score
+      },
+      badges: badges.results,
+      preferences
     });
   }
 
   if (method === "POST" && path === "me/preferences") {
-    if (!user) return jsonResponse({ error: "Authentication required" }, 401);
-    const body = await request.json() as any;
-    await env.KV.put(`prefs:${user.id}`, JSON.stringify(body));
+    if (!user) return new Response("Unauthorized", { status: 401 });
+    const body = await request.json();
+    await env.KV.put(`prefs:${user.user_id}`, JSON.stringify(body));
     return jsonResponse({ success: true });
   }
 
   if (method === "GET" && path === "amenities") {
     const bbox = url.searchParams.get("bbox");
-    if (!bbox) return jsonResponse({ error: "BBOX required" }, 400);
+    if (!bbox) return new Response("Missing bbox", { status: 400 });
     
-    const [s, w, n, e] = bbox.split(",");
-    const query = `[out:json][timeout:25];(node["amenity"~"drinking_water|bicycle_repair_station"](${s},${w},${n},${e});node["service:bicycle:repair"="yes"](${s},${w},${n},${e});node["shop"="bicycle"](${s},${w},${n},${e}););out body;`;
-    
-    const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-    const resp = await fetch(overpassUrl, {
-      headers: { "User-Agent": "JojoKCBikeMap/1.0" }
-    });
+    const overpassUrl = `https://overpass-api.de/api/interpreter?data=[out:json];(node["amenity"~"drinking_water|bicycle_repair_station"](${bbox});node["shop"="bicycle"](${bbox}););out;`;
+    const resp = await fetch(overpassUrl);
     
     if (!resp.ok) {
       const text = await resp.text();
@@ -298,89 +298,47 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(id, slug, body.name, body.feature_type, body.category, body.status, 
       body.visibility || 'public', body.officiality || 'official', body.public_description, body.surface_note,
-      body.risk_note, body.weather_sensitivity, body.source_confidence,
-      body.longevity || 'permanent', body.poster_email, deleteToken, user?.id || null).run();
+      body.risk_note, body.weather_sensitivity, body.source_confidence, body.longevity, body.poster_email, deleteToken, user?.user_id).run();
 
-    if (body.geometry) {
-      const field = body.visibility === 'sensitive' ? 'admin_geometry' : 'public_geometry';
-      await env.DB.prepare(`INSERT INTO feature_geometries (feature_id, ${field}) VALUES (?, ?)`).bind(id, JSON.stringify(body.geometry)).run();
-    }
+    await env.DB.prepare("INSERT INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
+      .bind(id, JSON.stringify(body.geometry)).run();
 
-    if (body.sources && Array.isArray(body.sources)) {
+    if (body.sources) {
       for (const s of body.sources) {
         await env.DB.prepare("INSERT INTO feature_sources (id, feature_id, source_url, source_note) VALUES (?, ?, ?, ?)")
           .bind(crypto.randomUUID(), id, s.url, s.note).run();
       }
     }
 
-    // Reward points and badges
-    if (user) {
-      await env.DB.prepare("UPDATE users SET reputation_score = reputation_score + 10 WHERE id = ?").bind(user.id).run();
-      if (body.category === 'Pedestrian or walking bridges') {
-        await env.DB.prepare("INSERT OR IGNORE INTO user_badges (user_id, badge_id) VALUES (?, 'bridge-hunter')").bind(user.id, 'bridge-hunter').run();
-      }
-    }
-
-    return jsonResponse({ id, delete_token: deleteToken, success: true });
+    return jsonResponse({ success: true, id, delete_token: deleteToken });
   }
 
   if (method === "PUT" && path.startsWith("features/")) {
-    const id = path.replace("features/", "");
-    if (!isAdmin) return jsonResponse({ error: "Unauthorized" }, 403);
-    
+    const id = path.split("/")[1];
     const body = await request.json() as any;
     
-    // 1. Fetch current state for revision
-    const oldState = await env.DB.prepare(`
-      SELECT f.*, g.public_geometry, g.admin_geometry 
-      FROM features f LEFT JOIN feature_geometries g ON f.id = g.feature_id 
-      WHERE f.id = ?
-    `).bind(id).first() as any;
-
-    if (!oldState) return jsonResponse({ error: "Feature not found" }, 404);
-
-    // 2. Save revision
-    await env.DB.prepare(`
-      INSERT INTO feature_revisions (id, feature_id, actor, changed_fields, previous_state, new_state) 
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).bind(
-      crypto.randomUUID(), 
-      id, 
-      user?.email || 'admin', 
-      '[]',
-      JSON.stringify(oldState), 
-      JSON.stringify(body)
-    ).run();
-
-    // 3. Update feature
-    const slug = body.slug || body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    await env.DB.prepare(`
-      UPDATE features SET 
-        slug = ?, name = ?, feature_type = ?, category = ?, status = ?, 
-        visibility = ?, officiality = ?, public_description = ?, surface_note = ?, 
-        risk_note = ?, weather_sensitivity = ?, source_confidence = ?,
-        longevity = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).bind(
-      slug, body.name, body.feature_type, body.category, body.status,
-      body.visibility || 'public', body.officiality || 'official', body.public_description, body.surface_note,
-      body.risk_note, body.weather_sensitivity, body.source_confidence,
-      body.longevity || 'permanent', id
-    ).run();
-
-    // 4. Update geometry
-    if (body.geometry) {
-      const field = body.visibility === 'sensitive' ? 'admin_geometry' : 'public_geometry';
-      const nullField = body.visibility === 'sensitive' ? 'public_geometry' : 'admin_geometry';
-      await env.DB.prepare(`
-        UPDATE feature_geometries 
-        SET ${field} = ?, ${nullField} = NULL 
-        WHERE feature_id = ?
-      `).bind(JSON.stringify(body.geometry), id).run();
+    // Auth Check: Must be admin or owner
+    const feature = await env.DB.prepare("SELECT owner_id FROM features WHERE id = ?").bind(id).first() as { owner_id: string } | null;
+    if (!isAdmin && feature?.owner_id !== user?.user_id) {
+      return new Response("Unauthorized", { status: 401 });
     }
 
-    // 5. Update sources
-    if (body.sources && Array.isArray(body.sources)) {
+    await env.DB.prepare(`
+      UPDATE features SET 
+        name = ?, category = ?, status = ?, visibility = ?, officiality = ?, 
+        public_description = ?, surface_note = ?, risk_note = ?, weather_sensitivity = ?, 
+        source_confidence = ?, longevity = ?, poster_email = ?
+      WHERE id = ?
+    `).bind(body.name, body.category, body.status, body.visibility, body.officiality, 
+      body.public_description, body.surface_note, body.risk_note, body.weather_sensitivity, 
+      body.source_confidence, body.longevity, body.poster_email, id).run();
+
+    if (body.geometry) {
+      await env.DB.prepare("UPDATE feature_geometries SET public_geometry = ? WHERE feature_id = ?")
+        .bind(JSON.stringify(body.geometry), id).run();
+    }
+
+    if (body.sources) {
       await env.DB.prepare("DELETE FROM feature_sources WHERE feature_id = ?").bind(id).run();
       for (const s of body.sources) {
         await env.DB.prepare("INSERT INTO feature_sources (id, feature_id, source_url, source_note) VALUES (?, ?, ?, ?)")
@@ -391,92 +349,12 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     return jsonResponse({ success: true });
   }
 
-  if (method === "GET" && path.match(/^features\/([^\/]+)\/details$/)) {
+  if (method === "GET" && path.endsWith("/details")) {
     const id = path.split("/")[1];
-    const { results: comments } = await env.DB.prepare("SELECT * FROM comments WHERE feature_id = ? ORDER BY created_at DESC").bind(id).all();
-    const { results: reports } = await env.DB.prepare("SELECT * FROM reports WHERE feature_id = ? ORDER BY created_at DESC").bind(id).all();
-    const { results: sources } = await env.DB.prepare("SELECT * FROM feature_sources WHERE feature_id = ?").bind(id).all();
-    return jsonResponse({ comments: comments || [], reports: reports || [], sources: sources || [] });
-  }
-
-  if (method === "POST" && path.match(/^features\/([^\/]+)\/comments$/)) {
-    if (!user) return jsonResponse({ error: "Authentication required" }, 401);
-    const id = path.split("/")[1];
-    const body = await request.json() as { body: string };
-    const commentId = crypto.randomUUID();
-    
-    await env.DB.prepare(
-      "INSERT INTO comments (id, feature_id, user_id, author_name, body) VALUES (?, ?, ?, ?, ?)"
-    ).bind(commentId, id, user.id, user.email.split('@')[0], body.body).run();
-
-    // Small rep bump for commenting
-    await env.DB.prepare("UPDATE users SET reputation_score = reputation_score + 1 WHERE id = ?").bind(user.id).run();
-
-    return jsonResponse({ success: true, id: commentId });
-  }
-
-  if (method === "POST" && path === "reports") {
-    const body = await request.json() as any;
-    const id = crypto.randomUUID();
-    const deleteToken = (user || isAdmin) ? null : (body.poster_email ? crypto.randomUUID() : null);
-
-    await env.DB.prepare(
-      "INSERT INTO reports (id, feature_id, report_type, description, longevity, poster_email, delete_token, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(id, body.feature_id, body.report_type, body.description, body.longevity || 'temporary', body.poster_email, deleteToken, user?.id || null).run();
-
-    // Reward points and badges
-    if (user) {
-      await env.DB.prepare("UPDATE users SET reputation_score = reputation_score + 5 WHERE id = ?").bind(user.id).run();
-      await env.DB.prepare("INSERT OR IGNORE INTO user_badges (user_id, badge_id) VALUES (?, 'mud-finder')").bind(user.id, 'mud-finder').run();
-    }
-
-    return jsonResponse({ id, delete_token: deleteToken, success: true });
-  }
-
-  if (method === "POST" && path === "checkpoints") {
-    if (!user) return jsonResponse({ error: "Authentication required" }, 401);
-    const body = await request.json() as { feature_id: string, type: string };
-
-    const id = crypto.randomUUID();
-    await env.DB.prepare("INSERT INTO checkpoints (id, contributor_id, feature_id, check_in_type) VALUES (?, ?, ?, ?)")
-      .bind(id, user.id, body.feature_id, body.type || 'passage').run();
-
-    // Update feature verification date
-    await env.DB.prepare("UPDATE features SET last_verified_at = CURRENT_TIMESTAMP WHERE id = ?").bind(body.feature_id).run();
-
-    // Reward points
-    await env.DB.prepare("UPDATE users SET reputation_score = reputation_score + 2 WHERE id = ?").bind(user.id).run();
-
-    // Check for geography badges
-    let badgeUnlocked = null;
-    const feature = await env.DB.prepare("SELECT category FROM features WHERE id = ?").bind(body.feature_id).first() as any;
-
-    if (feature && feature.category === 'Pedestrian or walking bridges') {
-      const { count } = await env.DB.prepare("SELECT COUNT(*) as count FROM user_badges WHERE user_id = ? AND badge_id = 'river-crosser'").bind(user.id).first() as any;
-      if (count === 0) {
-        await env.DB.prepare("INSERT INTO user_badges (user_id, badge_id) VALUES (?, 'river-crosser')").bind(user.id, 'river-crosser').run();
-        badgeUnlocked = 'River Crosser';
-      }
-    }
-
-    return jsonResponse({ success: true, badge_unlocked: badgeUnlocked });
-  }
-  if (method === "DELETE" && path.startsWith("features/")) {
-    const id = path.replace("features/", "");
-    const token = url.searchParams.get("token");
-
-    if (isAdmin) {
-      await env.DB.prepare("DELETE FROM features WHERE id = ?").bind(id).run();
-      return jsonResponse({ success: true });
-    }
-
-    const feature = await env.DB.prepare("SELECT delete_token, owner_id FROM features WHERE id = ?").bind(id).first() as any;
-    if (feature && ((token && feature.delete_token === token) || (user && feature.owner_id === user.id))) {
-      await env.DB.prepare("DELETE FROM features WHERE id = ?").bind(id).run();
-      return jsonResponse({ success: true });
-    }
-
-    return jsonResponse({ error: "Unauthorized" }, 401);
+    const sources = await env.DB.prepare("SELECT * FROM feature_sources WHERE feature_id = ?").bind(id).all();
+    const reports = await env.DB.prepare("SELECT * FROM reports WHERE feature_id = ? ORDER BY created_at DESC").bind(id).all();
+    const comments = await env.DB.prepare("SELECT * FROM comments WHERE feature_id = ? ORDER BY created_at DESC").bind(id).all();
+    return jsonResponse({ sources: sources.results, reports: reports.results, comments: comments.results });
   }
 
   return new Response("Not Found", { status: 404 });
@@ -488,7 +366,7 @@ function jsonResponse(data: any, status = 200): Response {
     headers: { 
       "Content-Type": "application/json", 
       "Access-Control-Allow-Origin": "*",
-      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org https://*.vis.earthdata.nasa.gov https://*.arcgisonline.com https://*.tile-cyclosm.openstreetmap.fr https://mt1.google.com https://*.tile.thunderforest.com https://*.tile.openstreetmap.fr https://tile.osm.ch https://tile.memomaps.de https://*.tiles.openrailwaymap.org https://tile.waymarkedtrails.org; connect-src 'self' https://overpass-api.de https://nominatim.openstreetmap.org;"
+      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org https://*.vis.earthdata.nasa.gov https://*.arcgisonline.com https://*.tile-cyclosm.openstreetmap.fr https://mt1.google.com https://*.tile.thunderforest.com https://*.tile.openstreetmap.fr https://tile.osm.ch https://tile.memomaps.de https://*.tiles.openrailwaymap.org https://tile.waymarkedtrails.org; connect-src 'self' https://overpass-api.de https://nominatim.openstreetmap.org https://cloudflareinsights.com https://*.cloudflareinsights.com;"
     },
   });
 }

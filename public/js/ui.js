@@ -380,7 +380,6 @@ export function initThemeToggle() {
 
     // Sync to KV if logged in
     const hasSession = document.cookie.includes('session=');
-...
     if (hasSession) {
       try {
         const basemapSelect = document.getElementById('basemapSelect');

@@ -185,180 +185,194 @@ async function handleMarcImport(env: Env): Promise<Response> {
 }
 
 async function handleApiRequest(request: Request, env: Env, url: URL): Promise<Response> {
-  const method = request.method;
-  const path = url.pathname.replace("/api/", "");
+  try {
+    const method = request.method;
+    const path = url.pathname.replace("/api/", "");
 
-  const cookieHeader = request.headers.get("Cookie") || "";
-  const sessionToken = cookieHeader.split("; ").find(c => c.startsWith("session="))?.split("=")[1];
-  
-  let user: any = null;
-  let isAdmin = false;
-
-  if (sessionToken) {
-    const session = await env.DB.prepare(`
-      SELECT s.*, u.email, u.role, u.reputation_score
-      FROM sessions s
-      JOIN users u ON s.user_id = u.id
-      WHERE s.token = ? AND s.expires_at > CURRENT_TIMESTAMP
-    `).bind(sessionToken).first();
+    const cookieHeader = request.headers.get("Cookie") || "";
+    const sessionToken = cookieHeader.split("; ").find(c => c.startsWith("session="))?.split("=")[1];
+    const authHeader = request.headers.get("Authorization") || "";
     
-    if (session) {
-      user = session;
-      isAdmin = session.role === 'admin';
-    }
-  }
+    let user: any = null;
+    let isAdmin = false;
 
-  if (method === "GET" && path === "me") {
-    if (!user) return jsonResponse({ authenticated: false });
-    
-    const badges = await env.DB.prepare(`
-      SELECT b.* FROM badges b
-      JOIN user_badges ub ON b.id = ub.badge_id
-      WHERE ub.user_id = ?
-    `).bind(user.user_id).all();
-
-    const prefsRaw = await env.KV.get(`prefs:${user.user_id}`);
-    const preferences = prefsRaw ? JSON.parse(prefsRaw) : {};
-
-    return jsonResponse({
-      authenticated: true,
-      user: {
-        email: user.email,
-        role: user.role,
-        reputation_score: user.reputation_score
-      },
-      badges: badges.results,
-      preferences
-    });
-  }
-
-  if (method === "POST" && path === "me/preferences") {
-    if (!user) return new Response("Unauthorized", { status: 401 });
-    const body = await request.json();
-    await env.KV.put(`prefs:${user.user_id}`, JSON.stringify(body));
-    return jsonResponse({ success: true });
-  }
-
-  if (method === "GET" && path === "amenities") {
-    const bbox = url.searchParams.get("bbox");
-    if (!bbox) return new Response("Missing bbox", { status: 400 });
-    
-    const overpassUrl = `https://overpass-api.de/api/interpreter?data=[out:json];(node["amenity"~"drinking_water|bicycle_repair_station"](${bbox});node["shop"="bicycle"](${bbox}););out;`;
-    const resp = await fetch(overpassUrl);
-    
-    if (!resp.ok) {
-      const text = await resp.text();
-      return new Response(text, { status: resp.status });
-    }
-    
-    return jsonResponse(await resp.json());
-  }
-
-  if (method === "GET" && path === "features") {
-    const isHighRep = isAdmin || (user && (user.reputation_score >= 50 || user.role === 'contributor'));
-
-    const { results } = await env.DB.prepare(`
-      SELECT f.*, g.public_geometry, g.admin_geometry
-      FROM features f
-      LEFT JOIN feature_geometries g ON f.id = g.feature_id
-      WHERE f.visibility != 'private' OR ? = 1
-    `).bind(isAdmin ? 1 : 0).all();
-    
-    return jsonResponse(results.map(f => {
-      const isSensitive = f.visibility === 'sensitive';
+    // 1. Check for Session Cookie
+    if (sessionToken) {
+      const session = await env.DB.prepare(`
+        SELECT s.*, u.email, u.role, u.reputation_score
+        FROM sessions s
+        JOIN users u ON s.user_id = u.id
+        WHERE s.token = ? AND s.expires_at > CURRENT_TIMESTAMP
+      `).bind(sessionToken).first();
       
-      // Access Control: Discretion logic
-      // Guests and Level 1 see generalized data for sensitive features
-      const hasFullAccess = isAdmin || isHighRep;
+      if (session) {
+        user = session;
+        isAdmin = session.role === 'admin';
+      }
+    }
+
+    // 2. Check for ADMIN_TOKEN master key
+    if (!isAdmin && env.ADMIN_TOKEN && authHeader === `Bearer ${env.ADMIN_TOKEN}`) {
+      isAdmin = true;
+    }
+
+    if (method === "GET" && path === "me") {
+      if (!user) return jsonResponse({ authenticated: false });
       
-      let geometry = f.public_geometry;
-      if (hasFullAccess && f.admin_geometry) {
-        geometry = f.admin_geometry;
+      const badges = await env.DB.prepare(`
+        SELECT b.* FROM badges b
+        JOIN user_badges ub ON b.id = ub.badge_id
+        WHERE ub.user_id = ?
+      `).bind(user.user_id).all();
+
+      const prefsRaw = await env.KV.get(`prefs:${user.user_id}`);
+      const preferences = prefsRaw ? JSON.parse(prefsRaw) : {};
+
+      return jsonResponse({
+        authenticated: true,
+        user: {
+          email: user.email,
+          role: user.role,
+          reputation_score: user.reputation_score
+        },
+        badges: badges.results,
+        preferences
+      });
+    }
+
+    if (method === "POST" && path === "me/preferences") {
+      if (!user) return new Response("Unauthorized", { status: 401 });
+      const body = await request.json();
+      await env.KV.put(`prefs:${user.user_id}`, JSON.stringify(body));
+      return jsonResponse({ success: true });
+    }
+
+    if (method === "GET" && path === "amenities") {
+      const bbox = url.searchParams.get("bbox");
+      if (!bbox) return new Response("Missing bbox", { status: 400 });
+      
+      const overpassUrl = `https://overpass-api.de/api/interpreter?data=[out:json];(node["amenity"~"drinking_water|bicycle_repair_station"](${bbox});node["shop"="bicycle"](${bbox}););out;`;
+      const resp = await fetch(overpassUrl);
+      
+      if (!resp.ok) {
+        const text = await resp.text();
+        return new Response(text, { status: resp.status });
+      }
+      
+      return jsonResponse(await resp.json());
+    }
+
+    if (method === "GET" && path === "features") {
+      const isHighRep = isAdmin || (user && (user.reputation_score >= 50 || user.role === 'contributor'));
+
+      const { results } = await env.DB.prepare(`
+        SELECT f.*, g.public_geometry, g.admin_geometry
+        FROM features f
+        LEFT JOIN feature_geometries g ON f.id = g.feature_id
+        WHERE f.visibility != 'private' OR ? = 1
+      `).bind(isAdmin ? 1 : 0).all();
+      
+      return jsonResponse(results.map(f => {
+        const isSensitive = f.visibility === 'sensitive';
+        
+        // Access Control: Discretion logic
+        // Guests and Level 1 see generalized data for sensitive features
+        const hasFullAccess = isAdmin || isHighRep;
+        
+        let geometry = f.public_geometry;
+        if (hasFullAccess && f.admin_geometry) {
+          geometry = f.admin_geometry;
+        }
+
+        return {
+          ...f,
+          admin_geometry: isAdmin ? f.admin_geometry : undefined,
+          geometry: geometry ? JSON.parse(geometry as string) : null,
+          // Restrict sensitive metadata to high-rep users
+          public_description: (isSensitive && !hasFullAccess) ? "Detailed knowledge restricted to established contributors." : f.public_description,
+          admin_note: isAdmin ? f.admin_note : undefined,
+          surface_note: (isSensitive && !hasFullAccess) ? null : f.surface_note
+        };
+      }));
+    }
+
+    if (method === "POST" && path === "features") {
+      const body = await request.json() as any;
+      if (!body.name) return new Response("Name is required", { status: 400 });
+      
+      const id = crypto.randomUUID();
+      const slug = body.slug || body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const deleteToken = (user || isAdmin) ? null : (body.poster_email ? crypto.randomUUID() : null);
+
+      await env.DB.prepare(`
+        INSERT INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note, risk_note, weather_sensitivity, source_confidence, longevity, poster_email, delete_token, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(id, slug, body.name, body.feature_type, body.category, body.status, 
+        body.visibility || 'public', body.officiality || 'official', body.public_description, body.surface_note,
+        body.risk_note, body.weather_sensitivity, body.source_confidence, body.longevity, body.poster_email, deleteToken, user?.user_id || null).run();
+
+      await env.DB.prepare("INSERT INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
+        .bind(id, JSON.stringify(body.geometry)).run();
+
+      if (body.sources) {
+        for (const s of body.sources) {
+          await env.DB.prepare("INSERT INTO feature_sources (id, feature_id, source_url, source_note) VALUES (?, ?, ?, ?)")
+            .bind(crypto.randomUUID(), id, s.url, s.note).run();
+        }
       }
 
-      return {
-        ...f,
-        admin_geometry: isAdmin ? f.admin_geometry : undefined,
-        geometry: geometry ? JSON.parse(geometry as string) : null,
-        // Restrict sensitive metadata to high-rep users
-        public_description: (isSensitive && !hasFullAccess) ? "Detailed knowledge restricted to established contributors." : f.public_description,
-        admin_note: isAdmin ? f.admin_note : undefined,
-        surface_note: (isSensitive && !hasFullAccess) ? null : f.surface_note
-      };
-    }));
-  }
+      return jsonResponse({ success: true, id, delete_token: deleteToken });
+    }
 
-  if (method === "POST" && path === "features") {
-    const body = await request.json() as any;
-    const id = crypto.randomUUID();
-    const slug = body.slug || body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const deleteToken = (user || isAdmin) ? null : (body.poster_email ? crypto.randomUUID() : null);
-
-    await env.DB.prepare(`
-      INSERT INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note, risk_note, weather_sensitivity, source_confidence, longevity, poster_email, delete_token, owner_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(id, slug, body.name, body.feature_type, body.category, body.status, 
-      body.visibility || 'public', body.officiality || 'official', body.public_description, body.surface_note,
-      body.risk_note, body.weather_sensitivity, body.source_confidence, body.longevity, body.poster_email, deleteToken, user?.user_id).run();
-
-    await env.DB.prepare("INSERT INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
-      .bind(id, JSON.stringify(body.geometry)).run();
-
-    if (body.sources) {
-      for (const s of body.sources) {
-        await env.DB.prepare("INSERT INTO feature_sources (id, feature_id, source_url, source_note) VALUES (?, ?, ?, ?)")
-          .bind(crypto.randomUUID(), id, s.url, s.note).run();
+    if (method === "PUT" && path.startsWith("features/")) {
+      const id = path.split("/")[1];
+      const body = await request.json() as any;
+      
+      // Auth Check: Must be admin or owner
+      const feature = await env.DB.prepare("SELECT owner_id FROM features WHERE id = ?").bind(id).first() as { owner_id: string } | null;
+      if (!isAdmin && feature?.owner_id !== user?.user_id) {
+        return new Response("Unauthorized", { status: 401 });
       }
-    }
 
-    return jsonResponse({ success: true, id, delete_token: deleteToken });
-  }
+      await env.DB.prepare(`
+        UPDATE features SET 
+          name = ?, category = ?, status = ?, visibility = ?, officiality = ?, 
+          public_description = ?, surface_note = ?, risk_note = ?, weather_sensitivity = ?, 
+          source_confidence = ?, longevity = ?, poster_email = ?
+        WHERE id = ?
+      `).bind(body.name, body.category, body.status, body.visibility, body.officiality, 
+        body.public_description, body.surface_note, body.risk_note, body.weather_sensitivity, 
+        body.source_confidence, body.longevity, body.poster_email, id).run();
 
-  if (method === "PUT" && path.startsWith("features/")) {
-    const id = path.split("/")[1];
-    const body = await request.json() as any;
-    
-    // Auth Check: Must be admin or owner
-    const feature = await env.DB.prepare("SELECT owner_id FROM features WHERE id = ?").bind(id).first() as { owner_id: string } | null;
-    if (!isAdmin && feature?.owner_id !== user?.user_id) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-
-    await env.DB.prepare(`
-      UPDATE features SET 
-        name = ?, category = ?, status = ?, visibility = ?, officiality = ?, 
-        public_description = ?, surface_note = ?, risk_note = ?, weather_sensitivity = ?, 
-        source_confidence = ?, longevity = ?, poster_email = ?
-      WHERE id = ?
-    `).bind(body.name, body.category, body.status, body.visibility, body.officiality, 
-      body.public_description, body.surface_note, body.risk_note, body.weather_sensitivity, 
-      body.source_confidence, body.longevity, body.poster_email, id).run();
-
-    if (body.geometry) {
-      await env.DB.prepare("UPDATE feature_geometries SET public_geometry = ? WHERE feature_id = ?")
-        .bind(JSON.stringify(body.geometry), id).run();
-    }
-
-    if (body.sources) {
-      await env.DB.prepare("DELETE FROM feature_sources WHERE feature_id = ?").bind(id).run();
-      for (const s of body.sources) {
-        await env.DB.prepare("INSERT INTO feature_sources (id, feature_id, source_url, source_note) VALUES (?, ?, ?, ?)")
-          .bind(crypto.randomUUID(), id, s.url, s.note).run();
+      if (body.geometry) {
+        await env.DB.prepare("UPDATE feature_geometries SET public_geometry = ? WHERE feature_id = ?")
+          .bind(JSON.stringify(body.geometry), id).run();
       }
+
+      if (body.sources) {
+        await env.DB.prepare("DELETE FROM feature_sources WHERE feature_id = ?").bind(id).run();
+        for (const s of body.sources) {
+          await env.DB.prepare("INSERT INTO feature_sources (id, feature_id, source_url, source_note) VALUES (?, ?, ?, ?)")
+            .bind(crypto.randomUUID(), id, s.url, s.note).run();
+        }
+      }
+
+      return jsonResponse({ success: true });
     }
 
-    return jsonResponse({ success: true });
-  }
+    if (method === "GET" && path.endsWith("/details")) {
+      const id = path.split("/")[1];
+      const sources = await env.DB.prepare("SELECT * FROM feature_sources WHERE feature_id = ?").bind(id).all();
+      const reports = await env.DB.prepare("SELECT * FROM reports WHERE feature_id = ? ORDER BY created_at DESC").bind(id).all();
+      const comments = await env.DB.prepare("SELECT * FROM comments WHERE feature_id = ? ORDER BY created_at DESC").bind(id).all();
+      return jsonResponse({ sources: sources.results, reports: reports.results, comments: comments.results });
+    }
 
-  if (method === "GET" && path.endsWith("/details")) {
-    const id = path.split("/")[1];
-    const sources = await env.DB.prepare("SELECT * FROM feature_sources WHERE feature_id = ?").bind(id).all();
-    const reports = await env.DB.prepare("SELECT * FROM reports WHERE feature_id = ? ORDER BY created_at DESC").bind(id).all();
-    const comments = await env.DB.prepare("SELECT * FROM comments WHERE feature_id = ? ORDER BY created_at DESC").bind(id).all();
-    return jsonResponse({ sources: sources.results, reports: reports.results, comments: comments.results });
+    return new Response("Not Found", { status: 404 });
+  } catch (err: any) {
+    console.error("API Request Error:", err.message);
+    return new Response(`Server Error: ${err.message}`, { status: 500 });
   }
-
-  return new Response("Not Found", { status: 404 });
 }
 
 function jsonResponse(data: any, status = 200): Response {

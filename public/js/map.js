@@ -136,7 +136,10 @@ export async function fetchAmenities() {
       console.warn('Amenities API busy, skipping update.');
       return;
     }
-    if (!resp.ok) throw new Error('Proxy error');
+    if (!resp.ok) {
+      console.warn(`Amenities fetch failed: ${resp.status}`);
+      return;
+    }
     
     const data = await resp.json();
     layers.amenities.clearLayers();

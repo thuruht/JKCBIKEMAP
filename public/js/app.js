@@ -104,6 +104,15 @@ function initCryptAnimations() {
 async function init() {
   initThemeToggle();
   initLeafletMap('map', [39.03, -94.535], 12);
+  
+  if (map) {
+    map.on('click', (e) => {
+      // If clicking map background (not a marker/line), close the info card
+      if (e.originalEvent.target.id === 'map' || e.originalEvent.target.classList.contains('leaflet-container')) {
+        if (infoCard) infoCard.style.display = 'none';
+      }
+    });
+  }
   updateAdminUI();
   await refreshData();
   initCryptAnimations();

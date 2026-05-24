@@ -28,7 +28,8 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
                   f.category === 'Key parks' ? '🌳' : '📍';
 
   content.innerHTML = `
-    <div style="margin-bottom: var(--space-4);">
+    <button id="closeInfoCard" style="position: absolute; top: 12px; right: 12px; width: 24px; height: 24px; border-radius: 999px; background: var(--color-surface-offset); display: grid; place-items: center; font-size: 14px; color: var(--color-text-faint); border: 1px solid var(--color-border); cursor: pointer; z-index: 10;">×</button>
+    <div style="margin-bottom: var(--space-4); padding-right: 20px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
         <small>${f.category}</small>
         ${(isAdmin && f.id) ? `<button class="jump-btn" id="editFeatureBtn" style="padding: 2px 8px; font-size: 10px; background: var(--color-surface-offset);">Edit Knowledge</button>` : ''}

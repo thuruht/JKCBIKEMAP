@@ -231,8 +231,10 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     }
 
     // 2. Check for ADMIN_TOKEN master key
-    if (!isAdmin && env.ADMIN_TOKEN && authHeader.trim() === `Bearer ${env.ADMIN_TOKEN}`) {
-      isAdmin = true;
+    if (!isAdmin && env.ADMIN_TOKEN) {
+      if (authHeader.trim() === `Bearer ${env.ADMIN_TOKEN.trim()}`) {
+        isAdmin = true;
+      }
     }
 
     if (method === "GET" && path === "me") {

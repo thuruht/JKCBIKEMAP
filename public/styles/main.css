@@ -257,6 +257,16 @@ summary::-webkit-details-marker{display:none}
     margin-top: -32px;
   }
 
-  .floating{left:var(--space-2);right:var(--space-2);top: var(--space-2); bottom: auto;}
-  .card { width: 100%; max-width: none; max-height: 40vh; padding: var(--space-4); }
+  .floating{
+    left:0; right:0; top: auto; bottom: 0; 
+    z-index: 1000;
+  }
+  .card { 
+    width: 100%; max-width: none; 
+    max-height: 48vh; 
+    padding: var(--space-5); 
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-bottom: none;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.15);
+  }
 }

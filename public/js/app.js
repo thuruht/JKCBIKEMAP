@@ -1,4 +1,4 @@
-import { fetchFeatures, createFeature, updateFeature } from './api.js';
+import { fetchFeatures, createFeature, updateFeature, fetchMe, assignUserRole } from './api.js';
 import { initLeafletMap, renderMap, flyToFeature, enableMapPicker, toggleLayer, fetchAmenities, map, switchBasemap, toggleOverlay, startLineDrawing } from './map.js';
 import { updateInfoCard, renderLegend, initThemeToggle, openModal, closeModal, openHelpModal, closeHelpModal, switchTab } from './ui.js';
 import { downloadGeoJSON, getCategoryMeta } from './utils.js';
@@ -7,10 +7,6 @@ import { downloadGeoJSON, getCategoryMeta } from './utils.js';
 const infoCard = document.getElementById('infoCard');
 const legendStack = document.getElementById('legendStack');
 const searchInput = document.getElementById('searchInput');
-const submitLoginBtn = document.getElementById('submitLoginBtn');
-const adminTokenInput = document.getElementById('adminTokenInput');
-const loginView = document.getElementById('login-view');
-const logoutBtn = document.getElementById('logoutBtn');
 const helpBtn = document.getElementById('helpBtn');
 const quickReportBtn = document.getElementById('quickReportBtn');
 const adminActions = document.getElementById('adminActions');
@@ -22,6 +18,14 @@ const closeModalBtn = document.getElementById('closeModalBtn');
 const closeHelpBtn = document.getElementById('closeHelpBtn');
 const featureForm = document.getElementById('featureForm');
 const pickOnMapBtn = document.getElementById('pickOnMapBtn');
+
+// Admin Panel Elements
+const adminAuthRequired = document.getElementById('admin-auth-required');
+const roleManagementSection = document.getElementById('roleManagementSection');
+const targetUserEmail = document.getElementById('targetUserEmail');
+const targetUserRole = document.getElementById('targetUserRole');
+const assignRoleBtn = document.getElementById('assignRoleBtn');
+const featureActions = document.getElementById('featureActions');
 
 // Tabs
 const tabExplore = document.getElementById('tab-explore');
@@ -37,46 +41,58 @@ const userEmailDisplay = document.getElementById('userEmailDisplay');
 const userLogoutBtn = document.getElementById('userLogoutBtn');
 
 let allFeatures = [];
-let isAdmin = !!localStorage.getItem('ADMIN_TOKEN');
+let currentUser = null;
+let userPermissions = [];
+
+function hasPermission(p) {
+  return userPermissions.includes(p);
+}
 
 function updateAdminUI() {
-  if (isAdmin) {
-    if (loginView) loginView.style.display = 'none';
-    if (adminActions) adminActions.style.display = 'block';
-    if (logoutBtn) logoutBtn.style.display = 'block';
+  const isAdmin = hasPermission('user.role.assign');
+  const isStaff = hasPermission('feature.any.hide') || hasPermission('feature.any.update_public_fields');
+
+  if (currentUser) {
+    if (adminAuthRequired) adminAuthRequired.style.display = 'none';
+    if (adminActions) adminActions.style.display = isStaff ? 'block' : 'none';
+    
+    // Feature Actions (Moderators + Admins)
+    if (featureActions) featureActions.style.display = (isStaff || isAdmin) ? 'block' : 'none';
+    
+    // Admin only tools
+    if (importMarcBtn) importMarcBtn.style.display = hasPermission('feature.import_official') ? 'block' : 'none';
+    if (roleManagementSection) roleManagementSection.style.display = isAdmin ? 'block' : 'none';
   } else {
-    if (loginView) loginView.style.display = 'block';
+    if (adminAuthRequired) adminAuthRequired.style.display = 'block';
     if (adminActions) adminActions.style.display = 'none';
-    if (logoutBtn) logoutBtn.style.display = 'none';
   }
   
   if (allFeatures.length) {
-    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag, isAdmin);
-    renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isAdmin)));
+    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isStaff || isAdmin), handleMarkerDrag, isStaff || isAdmin);
+    renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isStaff || isAdmin)));
   }
 }
 
 async function refreshData() {
   try {
     allFeatures = await fetchFeatures();
-    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag, isAdmin);
-    renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isAdmin)));
+    const isStaff = hasPermission('feature.any.hide') || hasPermission('feature.any.update_public_fields') || hasPermission('user.role.assign');
+    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isStaff), handleMarkerDrag, isStaff);
+    renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isStaff)));
   } catch (err) {
     console.error('Failed to fetch features:', err);
   }
 }
 
 async function handleMarkerDrag(feature, newCoords) {
-  if (!isAdmin) return;
-  const token = localStorage.getItem('ADMIN_TOKEN');
+  if (!hasPermission('feature.any.update_geometry')) return;
   try {
     const updated = { ...feature, geometry: { type: 'Point', coordinates: newCoords } };
-    await updateFeature(feature.id, updated, token);
+    await updateFeature(feature.id, updated);
   } catch (err) {
     alert('Failed to update marker position: ' + err.message);
   }
 }
-
 
 function initCryptAnimations() {
   const scanline = document.querySelector('.crypt-scan');
@@ -106,13 +122,13 @@ async function init() {
   
   if (map) {
     map.on('click', (e) => {
-      // If clicking map background (not a marker/line), close the info card
       if (e.originalEvent.target.id === 'map' || e.originalEvent.target.classList.contains('leaflet-container')) {
         if (infoCard) infoCard.style.display = 'none';
       }
     });
   }
-  updateAdminUI();
+  
+  await checkUserAuth();
   await refreshData();
   initCryptAnimations();
 
@@ -122,36 +138,33 @@ async function init() {
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
       const q = e.target.value.toLowerCase();
+      const isStaff = hasPermission('feature.any.hide') || hasPermission('feature.any.update_public_fields') || hasPermission('user.role.assign');
+
       if (!q) {
         if (searchResultsList) searchResultsList.innerHTML = '';
-        renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag, isAdmin);
+        renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isStaff), handleMarkerDrag, isStaff);
         return;
       }
 
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(async () => {
-        // 1. Filter Local Knowledge
         const filtered = allFeatures.filter(f =>
           f.name.toLowerCase().includes(q) ||
           (f.public_description && f.public_description.toLowerCase().includes(q)) ||
           f.category.toLowerCase().includes(q)
         );
 
-        // 2. Clear and Render Sidebar List
         if (searchResultsList) {
           searchResultsList.innerHTML = '';
-          
-          // Render local matches first
           filtered.forEach(f => {
             const tile = document.createElement('div');
             tile.className = 'tile-btn';
             tile.style.borderLeft = `4px solid ${getCategoryMeta(f.category).swatch}`;
             tile.innerHTML = `<div><strong>${f.name}</strong><br><small style="font-size:9px; opacity:0.7;">${f.category}</small></div>`;
-            tile.onclick = () => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isAdmin));
+            tile.onclick = () => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isStaff));
             searchResultsList.appendChild(tile);
           });
 
-          // 3. Fetch Nominatim Matches
           try {
             const nomResp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&viewbox=-95.1,39.3,-94.1,38.7&bounded=1`);
             const nomData = await nomResp.json();
@@ -165,7 +178,7 @@ async function init() {
               nomData.forEach(place => {
                 const tile = document.createElement('div');
                 tile.className = 'tile-btn';
-                tile.style.borderLeft = '4px solid #94a3b8ff'; // Neutral gray for global
+                tile.style.borderLeft = '4px solid #94a3b8ff';
                 tile.innerHTML = `<div><strong>${place.display_name.split(',')[0]}</strong><br><small style="font-size:9px; opacity:0.7;">${place.display_name.split(',').slice(1, 3).join(',')}</small></div>`;
                 tile.onclick = () => {
                   map.flyTo([place.lat, place.lon], 15);
@@ -178,7 +191,7 @@ async function init() {
           }
         }
 
-        renderMap(filtered, allFeatures.length, (f) => updateInfoCard(f, infoCard, isAdmin), handleMarkerDrag, isAdmin);
+        renderMap(filtered, allFeatures.length, (f) => updateInfoCard(f, infoCard, isStaff), handleMarkerDrag, isStaff);
       }, 400);
     });
   }
@@ -189,91 +202,97 @@ async function init() {
     } catch (e) {
       console.warn('Server logout failed, clearing locally');
     }
-    localStorage.removeItem('ADMIN_TOKEN');
     document.cookie = "session=; Max-Age=0; path=/; SameSite=Strict;";
     location.reload();
   };
 
-  if (submitLoginBtn) {
-    submitLoginBtn.addEventListener('click', () => {
-      const token = adminTokenInput.value;
-      if (token) {
-        localStorage.setItem('ADMIN_TOKEN', token.trim());
-        isAdmin = true;
-        adminTokenInput.value = '';
-        updateAdminUI();
+  if (userLogoutBtn) userLogoutBtn.addEventListener('click', doLogout);
+
+  if (assignRoleBtn) {
+    assignRoleBtn.addEventListener('click', async () => {
+      const email = targetUserEmail.value;
+      const role = targetUserRole.value;
+      if (!email) return alert('Enter a user email');
+      try {
+        assignRoleBtn.disabled = true;
+        await assignUserRole(email, role);
+        alert(`Role '${role}' assigned to ${email}`);
+        targetUserEmail.value = '';
+      } catch (err) {
+        alert('Failed: ' + err.message);
+      } finally {
+        assignRoleBtn.disabled = false;
       }
     });
-  }
-
-  if (logoutBtn) {
-    logoutBtn.addEventListener('click', doLogout);
   }
 
   // Basemap Selector
   const basemapSelect = document.getElementById('basemapSelect');
   const saveDefaultBasemapBtn = document.getElementById('saveDefaultBasemapBtn');
 
-  const checkUserAuth = async () => {
+  async function checkUserAuth() {
     try {
-      const resp = await fetch('/api/me');
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data.authenticated) {
-          if (userLoggedOutView) userLoggedOutView.style.display = 'none';
-          if (userLoggedInView) userLoggedInView.style.display = 'block';
-          if (userEmailDisplay) userEmailDisplay.textContent = data.user.email;
-          isAdmin = isAdmin || data.user.role === 'admin';
-          
-          // Apply gamification data
-          const levelEl = document.getElementById('contributor-level');
-          const xpEl = document.getElementById('contributor-xp');
-          const barEl = document.getElementById('xp-progress-bar');
-          const badgeGrid = document.getElementById('user-badges-grid');
-
-          if (data.user.reputation_score !== undefined) {
-            const score = data.user.reputation_score;
-            const level = Math.floor(score / 50) + 1;
-            const xpInLevel = score % 50;
-            const progress = (xpInLevel / 50) * 100;
-
-            const levelNames = ['SCOUT', 'PATHFINDER', 'EXPLORER', 'CHART-MASTER', 'KNOWLEDGE-NODE', 'TRAIL-WIZARD', 'TERRAIN-GURU', 'MAP-VANGUARD', 'DATA-ELITE', 'LOCAL LEGEND'];
-            const levelName = levelNames[Math.min(level - 1, 9)];
-
-            if (levelEl) levelEl.textContent = `LEVEL ${level} ${levelName}`;
-            if (xpEl) xpEl.textContent = `${score} XP`;
-            if (barEl) barEl.style.width = `${progress}%`;
-
-            if (badgeGrid && data.badges) {
-              badgeGrid.innerHTML = '';
-              data.badges.forEach(b => {
-                const badge = document.createElement('div');
-                badge.style.cssText = 'padding: 2px 6px; border-radius: 4px; background: var(--color-primary-soft); color: var(--color-primary); font-size: 8px; font-weight: 700; text-transform: uppercase; border: 1px solid var(--color-primary);';
-                badge.textContent = b.name;
-                badge.title = b.description;
-                badgeGrid.appendChild(badge);
-              });
-            }
-          }
-
-          // Apply saved preferences (basemap, theme)
-          if (data.preferences) {
-            if (data.preferences.basemap) {
-              switchBasemap(data.preferences.basemap);
-              if (basemapSelect) basemapSelect.value = data.preferences.basemap;
-            }
-            if (data.preferences.theme) {
-              const root = document.documentElement;
-              root.setAttribute('data-theme', data.preferences.theme);
-              localStorage.setItem('theme', data.preferences.theme);
-            }
-          }
-
-          // Show 'Set Default' basemap button
-          if (saveDefaultBasemapBtn) saveDefaultBasemapBtn.style.display = 'block';
-          
-          updateAdminUI();
+      const data = await fetchMe();
+      if (data.authenticated) {
+        currentUser = data.user;
+        userPermissions = data.user.permissions || [];
+        
+        if (userLoggedOutView) userLoggedOutView.style.display = 'none';
+        if (userLoggedInView) userLoggedInView.style.display = 'block';
+        if (userEmailDisplay) userEmailDisplay.textContent = data.user.email;
+        
+        const usernameDisplay = document.getElementById('userUsernameDisplay');
+        const avatarDisplay = document.getElementById('userAvatarDisplay');
+        if (usernameDisplay) {
+          usernameDisplay.textContent = data.user.username || data.user.email.split('@')[0];
         }
+        if (avatarDisplay && data.user.avatar_url) {
+          avatarDisplay.src = data.user.avatar_url;
+          avatarDisplay.style.display = 'block';
+        }
+        
+        // Apply gamification data
+        const levelEl = document.getElementById('contributor-level');
+        const xpEl = document.getElementById('contributor-xp');
+        const barEl = document.getElementById('xp-progress-bar');
+        const badgeGrid = document.getElementById('user-badges-grid');
+
+        if (data.user.reputation_score !== undefined) {
+          const score = data.user.reputation_score;
+          const level = Math.floor(score / 50) + 1;
+          const xpInLevel = score % 50;
+          const progress = (xpInLevel / 50) * 100;
+          const levelNames = ['SCOUT', 'PATHFINDER', 'EXPLORER', 'CHART-MASTER', 'KNOWLEDGE-NODE', 'TRAIL-WIZARD', 'TERRAIN-GURU', 'MAP-VANGUARD', 'DATA-ELITE', 'LOCAL LEGEND'];
+          const levelName = levelNames[Math.min(level - 1, 9)];
+
+          if (levelEl) levelEl.textContent = `LEVEL ${level} ${levelName}`;
+          if (xpEl) xpEl.textContent = `${score} XP`;
+          if (barEl) barEl.style.width = `${progress}%`;
+
+          if (badgeGrid && data.badges) {
+            badgeGrid.innerHTML = '';
+            data.badges.forEach(b => {
+              const badge = document.createElement('div');
+              badge.style.cssText = 'padding: 2px 6px; border-radius: 4px; background: var(--color-primary-soft); color: var(--color-primary); font-size: 8px; font-weight: 700; text-transform: uppercase; border: 1px solid var(--color-primary);';
+              badge.textContent = b.name;
+              badge.title = b.description;
+              badgeGrid.appendChild(badge);
+            });
+          }
+        }
+
+        if (data.preferences) {
+          if (data.preferences.basemap) {
+            switchBasemap(data.preferences.basemap);
+            if (basemapSelect) basemapSelect.value = data.preferences.basemap;
+          }
+          if (data.preferences.theme) {
+            document.documentElement.setAttribute('data-theme', data.preferences.theme);
+            localStorage.setItem('theme', data.preferences.theme);
+          }
+        }
+        if (saveDefaultBasemapBtn) saveDefaultBasemapBtn.style.display = 'block';
+        updateAdminUI();
       }
     } catch (err) {
       console.warn('Auth check failed:', err);
@@ -284,17 +303,15 @@ async function init() {
     sendMagicLinkBtn.addEventListener('click', async () => {
       const email = loginEmailInput.value;
       if (!email) return alert('Email required');
-      
       try {
         sendMagicLinkBtn.disabled = true;
         sendMagicLinkBtn.textContent = 'Sending...';
-        const resp = await fetch('/auth/login', {
+        await fetch('/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email })
         });
-        await resp.json();
-        alert('Verification link sent! Please check your inbox (and spam folder) for your secure magic link.');
+        alert('Verification link sent! Check your inbox.');
       } catch (err) {
         alert('Failed to send link: ' + err.message);
       } finally {
@@ -303,21 +320,6 @@ async function init() {
       }
     });
   }
-
-  const doLogout = async () => {
-    try {
-      await fetch('/auth/logout', { method: 'POST' });
-    } catch (e) {
-      console.warn('Server logout failed, clearing locally');
-    }
-    localStorage.removeItem('ADMIN_TOKEN');
-    document.cookie = "session=; Max-Age=0; path=/; SameSite=Strict;";
-    location.reload();
-  };
-
-  if (userLogoutBtn) userLogoutBtn.addEventListener('click', doLogout);
-
-  checkUserAuth();
 
   if (exportGeoJsonBtn) {
     exportGeoJsonBtn.addEventListener('click', () => {
@@ -337,9 +339,8 @@ async function init() {
       reader.onload = async (event) => {
         try {
           const geojson = JSON.parse(event.target.result);
-          if (!geojson.features || !Array.isArray(geojson.features)) throw new Error("Invalid GeoJSON: missing features array.");
+          if (!geojson.features || !Array.isArray(geojson.features)) throw new Error("Invalid GeoJSON.");
           
-          const token = localStorage.getItem('ADMIN_TOKEN');
           let count = 0;
           importGeoJsonBtn.disabled = true;
           importGeoJsonBtn.textContent = 'Importing...';
@@ -356,22 +357,21 @@ async function init() {
               status: props.status || 'active',
               officiality: props.officiality || 'official',
               visibility: props.visibility || 'public',
-              public_description: props.public_description || props.description || '',
-              surface_note: props.surface_note || '',
+              public_description: props.public_description || '',
               geometry: geom
             };
             
             try {
-              await createFeature(data, token);
+              await createFeature(data);
               count++;
             } catch (err) {
-              console.warn("Failed to import feature:", data.name, err);
+              console.warn("Failed import:", data.name, err);
             }
           }
-          alert(`Successfully imported ${count} features.`);
+          alert(`Imported ${count} features.`);
           await refreshData();
         } catch (err) {
-          alert("Error parsing GeoJSON: " + err.message);
+          alert("Error: " + err.message);
         } finally {
           importGeoJsonBtn.disabled = false;
           importGeoJsonBtn.textContent = 'Import GeoJSON';
@@ -384,14 +384,11 @@ async function init() {
 
   if (importMarcBtn) {
     importMarcBtn.addEventListener('click', async () => {
-      if (!confirm('This will fetch and import the latest MARC data. Continue?')) return;
-      const token = localStorage.getItem('ADMIN_TOKEN');
+      if (!confirm('Fetch and import latest MARC data?')) return;
       try {
         importMarcBtn.disabled = true;
         importMarcBtn.textContent = 'Importing...';
-        const resp = await fetch('/admin/import-marc', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const resp = await fetch('/admin/import-marc');
         const result = await resp.text();
         alert(result);
         await refreshData();
@@ -410,7 +407,7 @@ async function init() {
 
   if (quickReportBtn) {
     quickReportBtn.addEventListener('click', () => {
-      alert('Click on the map to report an issue (mud, flooding, construction).');
+      alert('Click on the map to report an issue.');
       enableMapPicker((coords) => {
         openModal({
           name: 'New Report',
@@ -462,27 +459,20 @@ async function init() {
     saveDefaultBasemapBtn.addEventListener('click', async () => {
       const basemapId = basemapSelect ? basemapSelect.value : 'pioneer';
       const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-      
       try {
         saveDefaultBasemapBtn.disabled = true;
         saveDefaultBasemapBtn.textContent = 'SAVING...';
-        
         await fetch('/api/me/preferences', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            basemap: basemapId,
-            theme: currentTheme 
-          })
+          body: JSON.stringify({ basemap: basemapId, theme: currentTheme })
         });
-        
         saveDefaultBasemapBtn.textContent = 'SAVED!';
         setTimeout(() => {
           saveDefaultBasemapBtn.textContent = 'SET DEFAULT';
           saveDefaultBasemapBtn.disabled = false;
         }, 2000);
       } catch (err) {
-        console.error('Failed to save preferences:', err);
         saveDefaultBasemapBtn.textContent = 'ERROR';
         setTimeout(() => {
           saveDefaultBasemapBtn.textContent = 'SET DEFAULT';
@@ -499,13 +489,9 @@ async function init() {
     });
   }
 
-  let moveTimeout;
   if (map) {
     map.on('moveend', () => {
-      clearTimeout(moveTimeout);
-      moveTimeout = setTimeout(() => {
-        if (amenitiesToggle && amenitiesToggle.checked) fetchAmenities();
-      }, 500); // 500ms debounce
+      if (amenitiesToggle && amenitiesToggle.checked) fetchAmenities();
     });
   }
 
@@ -517,7 +503,6 @@ async function init() {
     pickOnMapBtn.addEventListener('click', () => {
       const type = document.getElementById('f_type').value;
       const geomField = document.getElementById('f_geometry');
-
       if (type === 'point') {
         const originalText = pickOnMapBtn.textContent;
         pickOnMapBtn.textContent = 'Click on Map...';
@@ -526,15 +511,12 @@ async function init() {
           pickOnMapBtn.textContent = originalText;
         });
       } else {
-        closeModal(); // Hide modal during drawing
+        closeModal();
         if (drawingControls) drawingControls.style.display = 'flex';
-
         stopDrawingFn = startLineDrawing(
-          (points) => {
-            // Visual update only
-          },
+          (points) => {},
           (finalPoints) => {
-            openModal(null, 'line', true); // Re-open WITHOUT resetting form
+            openModal(null, 'line', true);
             document.getElementById('f_geometry').value = JSON.stringify({ type: 'LineString', coordinates: finalPoints });
             if (drawingControls) drawingControls.style.display = 'none';
           }
@@ -549,19 +531,16 @@ async function init() {
           stopDrawingFn = null;
         }
       });
-    }  }
+    }
+  }
 
   if (featureForm) {
     featureForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const token = localStorage.getItem('ADMIN_TOKEN');
       const id = document.getElementById('f_id').value;
-      
       try {
         const geomValue = document.getElementById('f_geometry').value;
-        if (!geomValue || geomValue === '') {
-          throw new Error('Please pick a location on the map first.');
-        }
+        if (!geomValue) throw new Error('Pick a location first.');
 
         const data = {
           name: document.getElementById('f_name').value,
@@ -584,19 +563,65 @@ async function init() {
           })).filter(s => s.url)
         };
 
-        let result;
         if (id) {
-          result = await updateFeature(id, data, token);
+          await updateFeature(id, data);
         } else {
-          result = await createFeature(data, token);
-          if (result.success && data.poster_email) {
-            alert(`Success! To delete this report later without an account, save this token: ${result.delete_token}\n(Normally we would email this to you)`);
+          const result = await createFeature(data);
+          if (result.success && data.poster_email && !currentUser) {
+            alert(`Success! Delete token: ${result.delete_token}`);
           }
         }
         closeModal();
         await refreshData();
       } catch (err) {
-        alert('Error saving feature: ' + err.message);
+        alert('Error: ' + err.message);
+      }
+    });
+  }
+
+  const editProfileBtn = document.getElementById('editProfileBtn');
+  if (editProfileBtn) {
+    editProfileBtn.addEventListener('click', () => {
+      import('./ui.js').then(ui => ui.openProfileEditModal(currentUser));
+    });
+  }
+
+  const profileEditForm = document.getElementById('profileEditForm');
+  if (profileEditForm) {
+    profileEditForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const saveBtn = document.getElementById('saveProfileBtn');
+      try {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+        
+        const username = document.getElementById('f_profile_username').value;
+        const bio = document.getElementById('f_profile_bio').value;
+        const social_links = Array.from(document.querySelectorAll('.profile-social-row')).map(row => 
+          row.querySelector('.social-url').value
+        ).filter(url => url);
+
+        import('./api.js').then(async (api) => {
+          await api.updateProfile({ username, bio, social_links });
+          
+          const avatarInput = document.getElementById('f_avatar_upload');
+          if (avatarInput.files && avatarInput.files[0]) {
+            await api.uploadAvatar(avatarInput.files[0]);
+          }
+
+          document.getElementById('profileEditModal').style.display = 'none';
+          alert('Profile updated successfully!');
+          location.reload();
+        }).catch(err => {
+          alert('Error: ' + err.message);
+        }).finally(() => {
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Save Profile';
+        });
+      } catch (err) {
+        alert('Error: ' + err.message);
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Profile';
       }
     });
   }

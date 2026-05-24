@@ -20,6 +20,10 @@ preview_id = "0ca8e11e659d4bd192407a0dc7a0a366"
 [[send_email]]
 name = "SEND_EMAIL"
 
+[[r2_buckets]]
+binding = "AVATARS_BUCKET"
+bucket_name = "jkcbikemap-avatars"
+
 [[routes]]
 pattern = "jojomap.kcmo.xyz"
 custom_domain = true

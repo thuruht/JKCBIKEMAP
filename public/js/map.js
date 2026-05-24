@@ -1,7 +1,6 @@
 import { iconFor, getCategoryMeta, createPopupContent } from './utils.js';
 
 export let map;
-let isAdmin = !!localStorage.getItem('ADMIN_TOKEN');
 let currentBasemap;
 
 const basemaps = {

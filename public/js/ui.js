@@ -1,13 +1,18 @@
 import { categoryMeta } from './config.js';
 import { getCategoryMeta } from './utils.js';
 import { flyToFeature } from './map.js';
+import { hideContent } from './api.js';
 
 const modal = document.getElementById('featureModal');
 const helpModal = document.getElementById('helpModal');
 const featureForm = document.getElementById('featureForm');
 const categorySelect = document.getElementById('f_category');
 
-export function updateInfoCard(f, infoCardElement, isAdmin = false) {
+function hasPermission(perms, p) {
+  return perms && perms.includes(p);
+}
+
+export function updateInfoCard(f, infoCardElement, userPermissions = []) {
   const content = document.getElementById('infoCardContent');
   
   if (infoCardElement.style.display === 'none' || !infoCardElement.style.display) {
@@ -19,25 +24,40 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
   }
 
   const statusColor = f.status === 'active' ? '#10b981ff' : f.status === 'caution' ? '#f59e0bff' : '#ef4444ff';
-  
-  // Category-based icon shorthand for accessibility
   const catIcon = f.category === 'Pedestrian or walking bridges' ? '🌉' : 
                   f.category === 'Trail spines' ? '🌿' : 
                   f.category === 'Field Reports' ? '⚠️' : 
                   f.category === 'Rider Amenities' ? '⛲' : 
                   f.category === 'Key parks' ? '🌳' : '📍';
 
+  const canEditAny = hasPermission(userPermissions, "feature.any.update");
+  const canEditPublic = hasPermission(userPermissions, "feature.any.update_public_fields");
+  const canHide = hasPermission(userPermissions, "feature.any.hide");
+  const canDelete = hasPermission(userPermissions, "feature.any.hard_delete");
+  const isSensitive = f.visibility === 'sensitive';
+  const canReadSensitive = hasPermission(userPermissions, "feature.sensitive.read");
+  const canReadMod = hasPermission(userPermissions, "feature.sensitive.moderation_read");
+
+  let description = f.public_description || 'No detailed knowledge provided yet.';
+  if (isSensitive && !canReadSensitive && !canReadMod) {
+    description = '<span style="font-style:italic; opacity:0.6;">Detailed knowledge restricted to established contributors.</span>';
+  }
+
   content.innerHTML = `
+    <button id="closeInfoCard" style="position: absolute; top: 12px; right: 12px; width: 24px; height: 24px; border-radius: 999px; background: var(--color-surface-offset); display: grid; place-items: center; font-size: 14px; color: var(--color-text-faint); border: 1px solid var(--color-border); cursor: pointer; z-index: 10;">×</button>
     <div style="margin-bottom: var(--space-4); padding-right: 20px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
         <small>${f.category}</small>
-        ${(isAdmin && f.id) ? `<button class="jump-btn" id="editFeatureBtn" style="padding: 2px 8px; font-size: 10px; background: var(--color-surface-offset);">Edit Knowledge</button>` : ''}
+        <div style="display: flex; gap: 4px;">
+          ${(canEditAny || canEditPublic) ? `<button class="jump-btn" id="editFeatureBtn" style="padding: 2px 8px; font-size: 10px; background: var(--color-surface-offset);">Edit</button>` : ''}
+          ${canHide ? `<button class="jump-btn" id="hideFeatureBtn" style="padding: 2px 8px; font-size: 10px; background: #fee2e2ff; color: #991b1bff;">Hide</button>` : ''}
+        </div>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3);">
         <h3 style="margin: 0; line-height: 1.1; flex: 1;">${catIcon} ${f.name}</h3>
         <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
           <div style="width: 14px; height: 14px; border-radius: 999px; background: ${statusColor}; border: 3px solid white; box-shadow: 0 0 0 1px ${statusColor}; flex: none;"></div>
-          ${f.visibility === 'sensitive' ? '<span title="Sensitive: Use discretion" style="font-size: 14px; cursor: help;">🤫</span>' : ''}
+          ${isSensitive ? '<span title="Sensitive: Use discretion" style="font-size: 14px; cursor: help;">🤫</span>' : ''}
         </div>
       </div>
     </div>
@@ -48,7 +68,7 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
     </div>
 
     <div style="font-size: var(--text-base); line-height: 1.5; color: var(--color-text); margin-bottom: var(--space-5); font-weight: 500;">
-      ${f.public_description || 'No detailed knowledge provided yet.'}
+      ${description}
     </div>
 
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); border-top: 1px solid var(--color-border); padding-top: var(--space-4); margin-bottom: var(--space-4);">
@@ -67,12 +87,12 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
       ${f.poster_email ? `<button class="jump-btn" id="deleteFeatureBtn" style="padding: 8px 12px; font-size: 11px; background: #fee2e2ff; color: #991b1bff; border: 1px solid #fecacaff; font-weight: 600;">Delete My Report</button>` : ''}
     </div>
 
-    ${f.surface_note ? `<p class="note"><strong>Rider Surface Note:</strong> ${f.surface_note}</p>` : ''}
+    ${f.surface_note && (!isSensitive || canReadSensitive || canReadMod) ? `<p class="note"><strong>Rider Surface Note:</strong> ${f.surface_note}</p>` : ''}
     ${f.risk_note ? `<p class="note" style="border-left-color: #ef4444ff;"><strong>⚠️ Rider Risk Note:</strong> ${f.risk_note}</p>` : ''}
     ${f.weather_sensitivity && f.weather_sensitivity !== 'none' ? `<p class="note" style="border-left-color: #3b82f6ff;"><strong>🌧️ Weather Note:</strong> ${f.weather_sensitivity}</p>` : ''}
     
-    ${f.admin_note ? `<div style="background: var(--color-primary-soft); padding: var(--space-3); border-radius: var(--radius-md); margin-top: var(--space-4); border: 1px solid var(--color-primary);">
-      <div style="font-size: 10px; color: var(--color-primary); text-transform: uppercase; font-weight: 800; margin-bottom: 4px; letter-spacing: 0.05em;">Admin Internal Note</div>
+    ${f.admin_note && canReadSensitive ? `<div style="background: var(--color-primary-soft); padding: var(--space-3); border-radius: var(--radius-md); margin-top: var(--space-4); border: 1px solid var(--color-primary);">
+      <div style="font-size: 10px; color: var(--color-primary); text-transform: uppercase; font-weight: 800; margin-bottom: 4px; letter-spacing: 0.05em;">Staff Internal Note</div>
       <div style="font-size: 13px; line-height: 1.4; font-weight: 500;">${f.admin_note}</div>
     </div>` : ''}
 
@@ -105,7 +125,7 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
         
         html += `<div style="margin-bottom: 10px; margin-top: 15px;"><strong style="font-size: 12px; color: var(--color-primary);">Community Discussion</strong></div>`;
         if (data.comments && data.comments.length > 0) {
-           html += data.comments.map(c => `<div class="note" style="margin-bottom: 8px;"><strong>${c.author_name}</strong>: ${c.body} <br><small>${new Date(c.created_at).toLocaleDateString()}</small></div>`).join('');
+           html += data.comments.map(c => `<div class="note" style="margin-bottom: 8px;"><strong><a href="#" onclick="event.preventDefault(); window.openPublicProfileModal('${c.author_name}')" style="color: var(--color-primary); text-decoration: none;">${c.author_name}</a></strong>: ${c.body} <br><small>${new Date(c.created_at).toLocaleDateString()}</small></div>`).join('');
         } else {
            html += `<div style="font-size: 11px; opacity: 0.7; margin-bottom: 10px;">No comments yet.</div>`;
         }
@@ -136,7 +156,7 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
                  headers: {'Content-Type':'application/json'},
                  body: JSON.stringify({body: val})
                });
-               updateInfoCard(f, infoCardElement, isAdmin);
+               updateInfoCard(f, infoCardElement, userPermissions);
             });
           }
         }
@@ -164,7 +184,7 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
         if (!resp.ok) throw new Error('Check-in failed');
         const res = await resp.json();
         alert(`Verified! +2 XP earned. ${res.badge_unlocked ? `Unlocked Badge: ${res.badge_unlocked}!` : ''}`);
-        location.reload(); // Refresh to update levels/badges
+        location.reload(); 
       } catch (err) {
         alert(err.message);
       } finally {
@@ -174,12 +194,28 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
     };
   }
 
-  if (isAdmin && document.getElementById('editFeatureBtn')) {
-    document.getElementById('editFeatureBtn').onclick = () => openModal(f);
+  const editBtn = document.getElementById('editFeatureBtn');
+  if (editBtn) {
+    editBtn.onclick = () => openModal(f);
   }
 
-  if (document.getElementById('deleteFeatureBtn')) {
-    document.getElementById('deleteFeatureBtn').onclick = async () => {
+  const hideBtn = document.getElementById('hideFeatureBtn');
+  if (hideBtn) {
+    hideBtn.onclick = async () => {
+      if (!confirm('Hide this feature from the public map?')) return;
+      try {
+        await hideContent('feature', f.id);
+        alert('Feature hidden.');
+        location.reload();
+      } catch (err) {
+        alert('Failed: ' + err.message);
+      }
+    };
+  }
+
+  const delBtn = document.getElementById('deleteFeatureBtn');
+  if (delBtn) {
+    delBtn.onclick = async () => {
       const token = prompt('Enter your unique delete token for this report:');
       if (!token) return;
       if (!confirm('Are you sure you want to permanently delete this report?')) return;
@@ -188,11 +224,18 @@ export function updateInfoCard(f, infoCardElement, isAdmin = false) {
         const resp = await fetch(`/api/features/${f.id}?token=${token}`, { method: 'DELETE' });
         if (!resp.ok) throw new Error('Invalid token or unauthorized');
         alert('Report deleted successfully.');
-        location.reload(); // Hard refresh to clear map for now, better to call refreshData if possible
+        location.reload();
       } catch (err) {
         alert(err.message);
       }
     };
+  }
+
+  const closeInfoCardBtn = document.getElementById('closeInfoCard');
+  if (closeInfoCardBtn) {
+    closeInfoCardBtn.addEventListener('click', () => {
+      infoCardElement.style.display = 'none';
+    });
   }
 }
 
@@ -244,7 +287,6 @@ export function openModal(f = null, type = 'point', preventReset = false) {
     document.getElementById('f_poster_email').value = f.poster_email || '';
     document.getElementById('f_geometry').value = JSON.stringify(f.geometry);
     
-    // Load sources
     const sourceList = document.getElementById('sourceLinksList');
     sourceList.innerHTML = '';
     fetch(`/api/features/${f.id}/details`)
@@ -265,7 +307,6 @@ export function openModal(f = null, type = 'point', preventReset = false) {
     document.getElementById('f_geometry').value = '';
     document.getElementById('sourceLinksList').innerHTML = '';
   }
-  // Handle source link adding
   const addSourceBtn = document.getElementById('addSourceLinkBtn');
   addSourceBtn.onclick = () => addSourceLinkRow();
 }
@@ -307,7 +348,6 @@ export function renderLegend(features, containerElement, onFeatureJump) {
 
   const categories = [...new Set(features.map(f => f.category))].sort();
   
-  // Populate category dropdown if needed
   if (categorySelect.options.length <= 1) {
     categories.forEach(cat => {
       const opt = document.createElement('option');
@@ -334,7 +374,6 @@ export function renderLegend(features, containerElement, onFeatureJump) {
       featureTiles.appendChild(tile);
     });
 
-    // GSAP stagger animation for tiles
     gsap.fromTo(featureTiles.children, 
       { scale: 0.9, opacity: 0 }, 
       { scale: 1, opacity: 1, duration: 0.3, stagger: 0.02, ease: "back.out(1.4)" }
@@ -342,18 +381,13 @@ export function renderLegend(features, containerElement, onFeatureJump) {
   };
 
   categorySelect.onchange = (e) => renderTiles(e.target.value);
-
-  // Initial render (show all if no category selected)
   renderTiles(categorySelect.value);
 }
 
 export function initThemeToggle() {
   const root = document.documentElement;
   const themeToggle = document.querySelector('[data-theme-toggle]');
-  
-  // Default to 'dark' as requested, but allow persistence
   let theme = localStorage.getItem('theme') || 'dark';
-  
   root.setAttribute('data-theme', theme);
   
   themeToggle.addEventListener('click', async () => {
@@ -361,7 +395,6 @@ export function initThemeToggle() {
     root.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
 
-    // Optional Basemap Synchronization
     const syncToggle = document.getElementById('syncThemeBasemap');
     if (syncToggle && syncToggle.checked) {
       const basemapSelect = document.getElementById('basemapSelect');
@@ -372,19 +405,15 @@ export function initThemeToggle() {
         basemapSelect.value = targetBasemap;
       }
     }
-// Sync to KV if logged in
-const hasSession = document.cookie.includes('session=');
-if (hasSession) {
+    const hasSession = document.cookie.includes('session=');
+    if (hasSession) {
       try {
         const basemapSelect = document.getElementById('basemapSelect');
         const currentBasemap = basemapSelect ? basemapSelect.value : 'pioneer';
         await fetch('/api/me/preferences', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            theme: theme,
-            basemap: currentBasemap 
-          })
+          body: JSON.stringify({ theme: theme, basemap: currentBasemap })
         });
       } catch (err) {
         console.error('Failed to sync theme preference:', err);
@@ -392,11 +421,114 @@ if (hasSession) {
     }
   });
 
-  // Global Escape key to close modals
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       closeModal();
       closeHelpModal();
+      if (document.getElementById('profileEditModal')) document.getElementById('profileEditModal').style.display = 'none';
+      if (document.getElementById('publicProfileModal')) document.getElementById('publicProfileModal').style.display = 'none';
     }
   });
 }
+
+// --- Profile Modal Logic ---
+import { fetchProfile } from './api.js';
+
+export function openProfileEditModal(user) {
+  const profileModal = document.getElementById('profileEditModal');
+  if (!profileModal) return;
+
+  document.getElementById('f_profile_username').value = user.username || '';
+  document.getElementById('f_profile_bio').value = user.bio || '';
+  if (user.avatar_url) {
+    document.getElementById('editAvatarPreview').src = user.avatar_url;
+  }
+  
+  const socialList = document.getElementById('profileSocialLinksList');
+  socialList.innerHTML = '';
+  if (user.social_links) {
+    user.social_links.forEach(link => addProfileSocialLinkRow(link));
+  }
+
+  const addSocialBtn = document.getElementById('addProfileSocialLinkBtn');
+  addSocialBtn.onclick = () => addProfileSocialLinkRow();
+
+  document.getElementById('closeProfileModalBtn').onclick = () => {
+    profileModal.style.display = 'none';
+  };
+
+  profileModal.style.display = 'flex';
+}
+
+function addProfileSocialLinkRow(url = '') {
+  const container = document.getElementById('profileSocialLinksList');
+  const div = document.createElement('div');
+  div.className = 'profile-social-row';
+  div.style.display = 'flex';
+  div.style.gap = '4px';
+  div.style.marginBottom = '4px';
+  div.innerHTML = `
+    <input type="url" class="social-url jump-btn" style="flex: 1; font-size: 10px;" placeholder="https://..." value="${url}">
+    <button type="button" class="jump-btn" style="width: auto; padding: 2px 6px; color: red;" onclick="this.parentElement.remove()">×</button>
+  `;
+  container.appendChild(div);
+}
+
+window.openPublicProfileModal = async function(username) {
+  const publicModal = document.getElementById('publicProfileModal');
+  const content = document.getElementById('publicProfileContent');
+  if (!publicModal || !content) return;
+
+  content.innerHTML = '<div style="text-align: center; opacity: 0.5;">Loading profile...</div>';
+  publicModal.style.display = 'flex';
+  
+  document.getElementById('closePublicProfileBtn').onclick = () => {
+    publicModal.style.display = 'none';
+  };
+
+  try {
+    const data = await fetchProfile(username);
+    const { profile, features, badges } = data;
+
+    let html = `
+      <div style="display: flex; gap: var(--space-4); align-items: flex-start; margin-bottom: var(--space-4);">
+        <img src="${profile.avatar_url || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23ccc%22/></svg>'}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover;">
+        <div style="flex: 1;">
+          <h2 style="margin: 0;">${profile.username}</h2>
+          <p style="font-size: 11px; opacity: 0.6; margin-bottom: 4px;">Reputation: ${profile.reputation_score || 0} XP</p>
+          <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+            ${(profile.social_links || []).map(l => `<a href="${l}" target="_blank" style="font-size: 10px; color: var(--color-primary); background: var(--color-primary-soft); padding: 2px 6px; border-radius: 4px; text-decoration: none;">Link</a>`).join('')}
+          </div>
+        </div>
+      </div>
+      
+      ${profile.bio ? `<p style="font-size: 13px; line-height: 1.5; margin-bottom: var(--space-4);">${profile.bio}</p>` : ''}
+    `;
+
+    if (badges && badges.length > 0) {
+      html += `
+        <div style="margin-bottom: var(--space-4);">
+          <h3 style="font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Badges</h3>
+          <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+            ${badges.map(b => `<div style="padding: 2px 6px; border-radius: 4px; background: var(--color-primary-soft); color: var(--color-primary); font-size: 9px; font-weight: 700; text-transform: uppercase; border: 1px solid var(--color-primary);" title="${b.description}">${b.name}</div>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    if (features && features.length > 0) {
+      html += `
+        <div>
+          <h3 style="font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Recent Contributions</h3>
+          <div style="display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto;">
+            ${features.map(f => `<div style="padding: 8px; background: var(--color-bg); border-radius: 4px; font-size: 11px;"><strong>${f.name}</strong> <span style="opacity: 0.6;">(${f.category})</span></div>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    content.innerHTML = html;
+  } catch (err) {
+    content.innerHTML = `<div style="text-align: center; color: red;">${err.message}</div>`;
+  }
+};

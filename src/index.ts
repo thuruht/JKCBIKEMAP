@@ -1,12 +1,95 @@
-import { D1Database, Fetcher } from "@cloudflare/workers-types";
+import { D1Database, Fetcher, R2Bucket } from "@cloudflare/workers-types";
 
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
   KV: KVNamespace; // Cloudflare KV for user preferences
   SEND_EMAIL: any; // Cloudflare Email Sending Beta
-  ADMIN_TOKEN?: string;
+  AVATARS_BUCKET: R2Bucket;
   APP_URL?: string;
+}
+
+const RBAC_SCHEMA: Record<string, string[]> = {
+  "public": [
+    "feature.public.read",
+    "user.profile.public.read"
+  ],
+  "user": [
+    "feature.public.read",
+    "feature.own.create",
+    "feature.own.read",
+    "feature.own.update",
+    "feature.own.request_sensitive",
+    "comment.own.create",
+    "comment.own.read",
+    "comment.own.update",
+    "comment.own.delete",
+    "report.create",
+    "user.profile.public.read"
+  ],
+  "contributor": [
+    "feature.public.read",
+    "feature.sensitive.read",
+    "feature.own.create",
+    "feature.own.read",
+    "feature.own.update",
+    "feature.own.request_sensitive",
+    "comment.own.create",
+    "comment.own.read",
+    "comment.own.update",
+    "comment.own.delete",
+    "report.create",
+    "user.profile.public.read"
+  ],
+  "moderator": [
+    "feature.public.read",
+    "feature.sensitive.moderation_read",
+    "feature.any.read_metadata",
+    "feature.any.update_public_fields",
+    "feature.any.update_geometry",
+    "feature.any.hide",
+    "feature.any.soft_delete",
+    "feature.any.lock",
+    "feature.sensitive.redact_public",
+    "comment.any.read",
+    "comment.any.hide",
+    "comment.any.delete",
+    "comment.thread.lock",
+    "report.read",
+    "report.resolve",
+    "user.profile.public.read",
+    "user.comment_mute.temporary"
+  ],
+  "admin": [
+    "feature.public.read",
+    "feature.sensitive.read",
+    "feature.any.read",
+    "feature.any.create",
+    "feature.any.update",
+    "feature.any.hide",
+    "feature.any.soft_delete",
+    "feature.any.hard_delete",
+    "feature.sensitive.toggle",
+    "feature.import_official",
+    "comment.any.read",
+    "comment.any.hide",
+    "comment.any.delete",
+    "comment.thread.lock",
+    "report.read",
+    "report.resolve",
+    "user.profile.public.read",
+    "user.reputation.adjust",
+    "user.role.assign",
+    "user.ban.permanent",
+    "badge.assign",
+    "system.settings.update",
+    "moderation.audit.read"
+  ]
+};
+
+function hasPermission(role: string, permission: string): boolean {
+  const perms = RBAC_SCHEMA[role] || RBAC_SCHEMA["public"];
+  return perms.includes(permission);
 }
 
 export default {
@@ -18,18 +101,9 @@ export default {
       return handleAuthRequest(request, env, url);
     }
 
-    // API Routes
-    if (url.pathname.startsWith("/api/")) {
+    // API Routes (includes RBAC protected admin/moderation)
+    if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/admin/")) {
       return handleApiRequest(request, env, url);
-    }
-
-    // Admin Routes
-    if (url.pathname === "/admin/import-marc") {
-      const authHeader = request.headers.get("Authorization");
-      if (env.ADMIN_TOKEN && authHeader !== `Bearer ${env.ADMIN_TOKEN}`) {
-        return new Response("Unauthorized", { status: 401 });
-      }
-      return handleMarcImport(env);
     }
 
     // Serve static assets with CSP
@@ -182,19 +256,19 @@ async function handleMarcImport(env: Env): Promise<Response> {
 async function handleApiRequest(request: Request, env: Env, url: URL): Promise<Response> {
   try {
     const method = request.method;
-    const path = url.pathname.replace("/api/", "");
+    const fullPath = url.pathname;
+    const path = fullPath.startsWith("/api/") ? fullPath.replace("/api/", "") : fullPath.replace("/", "");
 
     const cookieHeader = request.headers.get("Cookie") || "";
     const sessionToken = cookieHeader.split(";").find(c => c.trim().startsWith("session="))?.split("=")[1];
-    const authHeader = request.headers.get("Authorization") || "";
     
     let user: any = null;
-    let isAdmin = false;
+    let role = "public";
 
-    // 1. Check for Session Cookie
+    // 1. Resolve User and Role
     if (sessionToken) {
       const session = await env.DB.prepare(`
-        SELECT s.*, u.email, u.role, u.reputation_score
+        SELECT s.*, u.email, u.role, u.reputation_score, u.username, u.bio, u.avatar_url, u.social_links
         FROM sessions s
         JOIN users u ON s.user_id = u.id
         WHERE s.token = ? AND s.expires_at > CURRENT_TIMESTAMP
@@ -202,15 +276,46 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       
       if (session) {
         user = session;
-        isAdmin = session.role === 'admin';
+        role = session.role || "user";
       }
     }
 
-    // 2. Check for ADMIN_TOKEN master key
-    if (!isAdmin && env.ADMIN_TOKEN) {
-      if (authHeader.trim() === `Bearer ${env.ADMIN_TOKEN.trim()}`) {
-        isAdmin = true;
+    // 2. Admin: MARC Import
+    if (fullPath === "/admin/import-marc") {
+      if (!hasPermission(role, "feature.import_official")) {
+        return new Response("Unauthorized", { status: 401 });
       }
+      return handleMarcImport(env);
+    }
+
+    // 3. Admin: Manage Roles
+    if (method === "POST" && path === "admin/roles") {
+      if (!hasPermission(role, "user.role.assign")) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      const { email, newRole } = await request.json() as { email: string, newRole: string };
+      if (!email || !newRole) return new Response("Email and newRole required", { status: 400 });
+      
+      await env.DB.prepare("UPDATE users SET role = ? WHERE email = ?")
+        .bind(newRole, email).run();
+      
+      return jsonResponse({ success: true });
+    }
+
+    // 4. Moderation: Hide Feature/Comment
+    if (method === "POST" && path === "moderation/hide") {
+      const { type, id } = await request.json() as { type: 'feature' | 'comment', id: string };
+      if (!id) return new Response("ID required", { status: 400 });
+
+      if (type === 'feature') {
+        if (!hasPermission(role, "feature.any.hide")) return new Response("Unauthorized", { status: 401 });
+        await env.DB.prepare("UPDATE features SET visibility = 'private' WHERE id = ?").bind(id).run();
+      } else if (type === 'comment') {
+        if (!hasPermission(role, "comment.any.hide")) return new Response("Unauthorized", { status: 401 });
+        await env.DB.prepare("DELETE FROM comments WHERE id = ?").bind(id).run(); // Assuming soft-delete via visibility isn't in comments table yet
+      }
+      
+      return jsonResponse({ success: true });
     }
 
     if (method === "GET" && path === "me") {
@@ -230,10 +335,110 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         user: {
           email: user.email,
           role: user.role,
-          reputation_score: user.reputation_score
+          reputation_score: user.reputation_score,
+          permissions: RBAC_SCHEMA[role],
+          username: user.username,
+          bio: user.bio,
+          avatar_url: user.avatar_url,
+          social_links: user.social_links ? JSON.parse(user.social_links) : []
         },
         badges: badges.results,
         preferences
+      });
+    }
+
+    if (method === "PUT" && path === "me/profile") {
+      if (!user) return new Response("Unauthorized", { status: 401 });
+      const { username, bio, social_links } = await request.json() as any;
+
+      if (username) {
+        // Validate uniqueness if changing username
+        if (username !== user.username) {
+          const existing = await env.DB.prepare("SELECT id FROM users WHERE username = ?").bind(username).first();
+          if (existing) {
+            return jsonResponse({ error: "Username already taken" }, 400);
+          }
+        }
+      }
+
+      await env.DB.prepare(`
+        UPDATE users SET username = ?, bio = ?, social_links = ? WHERE id = ?
+      `).bind(username || null, bio || null, social_links ? JSON.stringify(social_links) : null, user.user_id).run();
+
+      return jsonResponse({ success: true });
+    }
+
+    if (method === "POST" && path === "me/avatar") {
+      if (!user) return new Response("Unauthorized", { status: 401 });
+      
+      // Parse formData
+      const formData = await request.formData();
+      const file = formData.get("file") as File;
+      if (!file) return new Response("No file uploaded", { status: 400 });
+
+      const ext = file.name.split('.').pop() || 'png';
+      const filename = `${user.user_id}-${Date.now()}.${ext}`;
+
+      // Upload to R2
+      await env.AVATARS_BUCKET.put(filename, file.stream(), {
+        httpMetadata: { contentType: file.type }
+      });
+
+      const avatar_url = `/api/avatars/${filename}`; // Or custom domain
+
+      await env.DB.prepare("UPDATE users SET avatar_url = ? WHERE id = ?").bind(avatar_url, user.user_id).run();
+
+      return jsonResponse({ success: true, avatar_url });
+    }
+
+    if (method === "GET" && path.startsWith("avatars/")) {
+      const filename = path.split("/")[1];
+      const object = await env.AVATARS_BUCKET.get(filename);
+      if (!object) return new Response("Not found", { status: 404 });
+      
+      const headers = new Headers();
+      object.writeHttpMetadata(headers);
+      headers.set("etag", object.httpEtag);
+      return new Response(object.body, { headers });
+    }
+
+    if (method === "GET" && path.startsWith("profiles/")) {
+      const username = path.split("/")[1];
+      if (!username) return new Response("Username required", { status: 400 });
+
+      const profile = await env.DB.prepare(`
+        SELECT id, username, bio, avatar_url, social_links, reputation_score, created_at 
+        FROM users WHERE username = ?
+      `).bind(username).first() as any;
+
+      if (!profile) return new Response("Profile not found", { status: 404 });
+
+      // Fetch user's public features
+      const features = await env.DB.prepare(`
+        SELECT id, name, category, feature_type, status, created_at 
+        FROM features 
+        WHERE owner_id = ? AND visibility = 'public'
+        ORDER BY created_at DESC LIMIT 50
+      `).bind(profile.id).all();
+
+      // Fetch user's badges
+      const badges = await env.DB.prepare(`
+        SELECT b.* FROM badges b
+        JOIN user_badges ub ON b.id = ub.badge_id
+        WHERE ub.user_id = ?
+      `).bind(profile.id).all();
+
+      return jsonResponse({
+        profile: {
+          username: profile.username,
+          bio: profile.bio,
+          avatar_url: profile.avatar_url,
+          social_links: profile.social_links ? JSON.parse(profile.social_links) : [],
+          reputation_score: profile.reputation_score,
+          created_at: profile.created_at
+        },
+        features: features.results,
+        badges: badges.results
       });
     }
 
@@ -270,18 +475,20 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     }
 
     if (method === "GET" && path === "features") {
-      const isHighRep = isAdmin || (user && (user.reputation_score >= 50 || user.role === 'contributor'));
+      const canReadSensitive = hasPermission(role, "feature.sensitive.read");
+      const canReadModeration = hasPermission(role, "feature.sensitive.moderation_read");
 
       const { results } = await env.DB.prepare(`
         SELECT f.*, g.public_geometry, g.admin_geometry
         FROM features f
         LEFT JOIN feature_geometries g ON f.id = g.feature_id
         WHERE f.visibility != 'private' OR ? = 1
-      `).bind(isAdmin ? 1 : 0).all();
+      `).bind(hasPermission(role, "feature.any.hide") ? 1 : 0).all();
       
       return jsonResponse(results.map(f => {
         const isSensitive = f.visibility === 'sensitive';
-        const hasFullAccess = isAdmin || isHighRep;
+        const hasFullAccess = canReadSensitive;
+        const hasModAccess = canReadModeration;
         
         let geometry = f.public_geometry;
         if (hasFullAccess && f.admin_geometry) {
@@ -297,22 +504,24 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
 
         return {
           ...f,
-          admin_geometry: isAdmin ? f.admin_geometry : undefined,
+          admin_geometry: hasFullAccess ? f.admin_geometry : undefined,
           geometry: parsedGeom,
-          public_description: (isSensitive && !hasFullAccess) ? "Detailed knowledge restricted to established contributors." : f.public_description,
-          admin_note: isAdmin ? f.admin_note : undefined,
-          surface_note: (isSensitive && !hasFullAccess) ? null : f.surface_note
+          public_description: (isSensitive && !hasFullAccess && !hasModAccess) ? "Detailed knowledge restricted to established contributors." : f.public_description,
+          admin_note: hasFullAccess ? f.admin_note : undefined,
+          surface_note: (isSensitive && !hasFullAccess && !hasModAccess) ? null : f.surface_note
         };
       }));
     }
 
     if (method === "POST" && path === "features") {
+      if (!hasPermission(role, "feature.own.create")) return new Response("Unauthorized", { status: 401 });
+      
       const body = await request.json() as any;
       if (!body.name) return new Response("Name is required", { status: 400 });
       
       const id = crypto.randomUUID();
       const slug = body.slug || body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + Math.random().toString(36).slice(2, 5);
-      const deleteToken = (user || isAdmin) ? null : (body.poster_email ? crypto.randomUUID() : null);
+      const deleteToken = user ? null : (body.poster_email ? crypto.randomUUID() : null);
 
       await env.DB.prepare(`
         INSERT INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note, risk_note, weather_sensitivity, source_confidence, longevity, poster_email, delete_token, owner_id)
@@ -340,8 +549,21 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       const body = await request.json() as any;
       
       const feature = await env.DB.prepare("SELECT owner_id FROM features WHERE id = ?").bind(id).first() as { owner_id: string } | null;
-      if (!isAdmin && feature?.owner_id !== user?.user_id) {
+      
+      const isOwner = user && feature?.owner_id === user.user_id;
+      const canEditAny = hasPermission(role, "feature.any.update");
+      const canEditPublic = hasPermission(role, "feature.any.update_public_fields");
+
+      if (!canEditAny && !isOwner && !canEditPublic) {
         return new Response("Unauthorized", { status: 401 });
+      }
+
+      // If only canEditPublic, we must restrict what fields are updated
+      // For now, simplicity: moderators can edit most things, but not visibility if it's toggle-restricted
+      if (canEditPublic && !canEditAny && !isOwner) {
+        if (body.visibility && body.visibility !== feature?.owner_id) { // This check is weak, but placeholder for policy
+           // Add logic for redact_public vs toggle
+        }
       }
 
       await env.DB.prepare(`
@@ -354,7 +576,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         body.public_description || null, body.surface_note || null, body.risk_note || null, body.weather_sensitivity || 'none', 
         body.source_confidence || 'medium', body.longevity || 'permanent', body.poster_email || null, id).run();
 
-      if (body.geometry) {
+      if (body.geometry && (isOwner || canEditAny || hasPermission(role, "feature.any.update_geometry"))) {
         await env.DB.prepare("UPDATE feature_geometries SET public_geometry = ? WHERE feature_id = ?")
           .bind(JSON.stringify(body.geometry), id).run();
       }

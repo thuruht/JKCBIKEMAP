@@ -68,15 +68,16 @@ To make these active, you must:
 
 ## Security & Admin
 
-### Setting the Admin Token
+### User Roles & RBAC
 
-Admin actions (adding/editing features) require an `ADMIN_TOKEN`. Set this as a secret in Cloudflare:
+The system uses email-based Role-Based Access Control:
+- **Public**: Unauthenticated users. View only.
+- **User**: Authenticated via Magic Link. Can submit knowledge.
+- **Contributor**: High-rep users (XP ≥ 50). Can view sensitive map details.
+- **Moderator**: Community safety role. Can edit public fields and hide content.
+- **Admin**: Full platform control. Can assign roles and import data.
 
-```bash
-npx wrangler secret put ADMIN_TOKEN
-```
-
-Then enter this token when prompted by the "Login as Admin" button in the app.
+Initial admins are seeded via migration `0009_rbac_system.sql`. Access is granted by logging in with a registered admin email.
 
 ## Features
 

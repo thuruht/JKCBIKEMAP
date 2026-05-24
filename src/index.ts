@@ -206,6 +206,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
   try {
     const method = request.method;
     const path = url.pathname.replace("/api/", "");
+    console.log(`API Request: ${method} ${path}`);
 
     const cookieHeader = request.headers.get("Cookie") || "";
     const sessionToken = cookieHeader.split(";").find(c => c.trim().startsWith("session="))?.split("=")[1];

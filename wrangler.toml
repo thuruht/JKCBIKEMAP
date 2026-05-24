@@ -10,6 +10,7 @@ binding = "ASSETS"
 binding = "DB"
 database_name = "jkcbikemap_db"
 database_id = "9140840a-3ad5-4834-bdbb-fa5dc2a4bf1a"
+migrations_dir = "migrations"
 
 [[kv_namespaces]]
 binding = "KV"
@@ -30,6 +31,3 @@ custom_domain = true
 # In case we need durable objects later
 # [durable_objects]
 # bindings = []
-
-# [[migrations]]
-# dir = "./migrations"

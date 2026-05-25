@@ -28,6 +28,16 @@ export async function updateFeature(id, data) {
   return await res.json();
 }
 
+export async function createReport(data) {
+  const res = await fetch('/api/reports', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) throw new Error('Failed to submit report');
+  return await res.json();
+}
+
 export async function fetchMe() {
   const res = await fetch('/api/me');
   if (!res.ok) throw new Error('Failed to fetch user profile');

@@ -310,6 +310,36 @@
     </div>
   </div>
 
+  <!-- Report Modal -->
+  <div id="reportModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Report an Issue</h2>
+      <p class="lede">Help other riders by reporting current conditions.</p>
+      <form id="reportForm" style="display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-4);">
+        <input type="hidden" id="r_feature_id">
+        <div class="field">
+          <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Issue Type</label>
+          <select id="r_type" class="jump-btn" style="width: 100%; background: var(--color-bg);">
+            <option value="mud">Mud / Soft Surface</option>
+            <option value="flooding">Flooding</option>
+            <option value="debris">Debris / Glass</option>
+            <option value="closure">Closed / Blocked</option>
+            <option value="hazard">Safety Hazard</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label style="display: block; font-size: var(--text-xs); font-weight: 600; margin-bottom: 4px;">Details (Optional)</label>
+          <textarea id="r_description" rows="3" class="jump-btn" style="width: 100%; background: var(--color-bg); font-family: inherit;"></textarea>
+        </div>
+        <div style="display: flex; gap: var(--space-3); margin-top: var(--space-2);">
+          <button type="button" id="closeReportModalBtn" class="jump-btn" style="flex: 1; text-align: center;">Cancel</button>
+          <button type="submit" class="jump-btn" style="flex: 1; text-align: center; background: var(--color-primary); color: white;">Submit Report</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Feature Form Modal -->
   <div id="featureModal" class="modal-overlay">
     <div class="modal-content">

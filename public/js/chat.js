@@ -141,14 +141,14 @@ async function renderMessage(msg, currentUser) {
   const isMe = msg.sender === currentUser.username;
   
   const div = document.createElement('div');
-  div.className = \`chat-msg-container \${isMe ? 'chat-msg-me' : 'chat-msg-them'}\`;
+  div.className = `chat-msg-container ${isMe ? 'chat-msg-me' : 'chat-msg-them'}`;
   
-  div.innerHTML = \`
-    <span class="chat-msg-meta">\${msg.sender} • \${new Date(msg.timestamp).toLocaleTimeString()}</span>
-    <div class="chat-msg-bubble \${isMe ? 'chat-bubble-me' : 'chat-bubble-them'}">
-      \${plaintext}
+  div.innerHTML = `
+    <span class="chat-msg-meta">${msg.sender} • ${new Date(msg.timestamp).toLocaleTimeString()}</span>
+    <div class="chat-msg-bubble ${isMe ? 'chat-bubble-me' : 'chat-bubble-them'}">
+      ${plaintext}
     </div>
-  \`;
+  `;
   
   chatMessages.appendChild(div);
   chatMessages.scrollTop = chatMessages.scrollHeight;

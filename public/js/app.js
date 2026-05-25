@@ -53,17 +53,23 @@ function hasPermission(p) {
   return userPermissions.includes(p);
 }
 
+function checkIsStaff() {
+  return hasPermission('feature.any.hide') || 
+         hasPermission('feature.any.update_public_fields') || 
+         hasPermission('user.role.assign');
+}
+
 function updateAdminUI() {
   const isAdmin = hasPermission('user.role.assign');
-  const isStaff = hasPermission('feature.any.hide') || hasPermission('feature.any.update_public_fields');
+  const isStaff = checkIsStaff();
 
   if (currentUser) {
     if (adminAuthRequired) adminAuthRequired.style.display = 'none';
     if (adminActions) adminActions.style.display = isStaff ? 'block' : 'none';
-    
+
     // Feature Actions (Moderators + Admins)
     if (featureActions) featureActions.style.display = (isStaff || isAdmin) ? 'block' : 'none';
-    
+
     // Admin only tools
     if (importMarcBtn) importMarcBtn.style.display = hasPermission('feature.import_official') ? 'block' : 'none';
     if (roleManagementSection) roleManagementSection.style.display = isAdmin ? 'block' : 'none';
@@ -71,7 +77,7 @@ function updateAdminUI() {
     if (adminAuthRequired) adminAuthRequired.style.display = 'block';
     if (adminActions) adminActions.style.display = 'none';
   }
-  
+
   if (allFeatures.length) {
     renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, userPermissions), handleMarkerDrag, isStaff || isAdmin);
     renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, userPermissions)));
@@ -81,14 +87,13 @@ function updateAdminUI() {
 async function refreshData() {
   try {
     allFeatures = await fetchFeatures();
-    const isStaff = hasPermission('feature.any.hide') || hasPermission('feature.any.update_public_fields') || hasPermission('user.role.assign');
+    const isStaff = checkIsStaff();
     renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, userPermissions), handleMarkerDrag, isStaff);
     renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, userPermissions)));
   } catch (err) {
     console.error('Failed to fetch features:', err);
   }
 }
-
 async function handleMarkerDrag(feature, newCoords) {
   if (!hasPermission('feature.any.update_geometry')) return;
   try {
@@ -233,7 +238,7 @@ async function init() {
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
       const q = e.target.value.toLowerCase();
-      const isStaff = hasPermission('feature.any.hide') || hasPermission('feature.any.update_public_fields') || hasPermission('user.role.assign');
+      const isStaff = checkIsStaff();
 
       if (!q) {
         if (searchResultsList) searchResultsList.innerHTML = '';
@@ -481,6 +486,11 @@ async function init() {
       switchTab('messages');
       const list = document.getElementById('messagesList');
       if (!list) return;
+
+      if (!window.currentUser) {
+        list.innerHTML = '<div style="text-align:center; opacity:0.5; padding:20px;">Please login on the Explore tab to access encrypted messages.</div>';
+        return;
+      }
 
       const recent = JSON.parse(localStorage.getItem('recent_chats') || '[]');
       if (recent.length === 0) {
@@ -830,6 +840,43 @@ async function init() {
         }
       };
       reader.readAsText(file);
+    };
+  }
+
+  const reportForm = document.getElementById('reportForm');
+  const closeReportModalBtn = document.getElementById('closeReportModalBtn');
+  if (reportForm) {
+    reportForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const feature_id = document.getElementById('r_feature_id').value;
+      const report_type = document.getElementById('r_type').value;
+      const description = document.getElementById('r_description').value;
+
+      try {
+        const submitBtn = reportForm.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting...';
+
+        const { createReport } = await import('./api.js');
+        await createReport({ feature_id, report_type, description });
+
+        alert('Report submitted! Thank you for helping the community.');
+        document.getElementById('reportModal').style.display = 'none';
+        reportForm.reset();
+        await refreshData();
+      } catch (err) {
+        alert('Failed to submit report: ' + err.message);
+      } finally {
+        const submitBtn = reportForm.querySelector('button[type="submit"]');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Report';
+      }
+    };
+  }
+
+  if (closeReportModalBtn) {
+    closeReportModalBtn.onclick = () => {
+      document.getElementById('reportModal').style.display = 'none';
     };
   }
 

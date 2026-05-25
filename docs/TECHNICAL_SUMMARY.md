@@ -41,6 +41,14 @@ A high-fidelity rider knowledge tool for the Kansas City metro. Unlike generic m
 - **Admin Marker Dragging:** Admins can drag point markers directly on the map to fine-tune coordinates. Changes save instantly.
 - **Tools:** In-browser tools for adding/editing points and lines, dragging markers, and a one-click MARC data update.
 
+## Recent Security & Functional Hardening (May 2026)
+- **CORS Lockdown:** Restricted `Access-Control-Allow-Origin` to specific app domains.
+- **CSRF Mitigation:** Converted state-mutating endpoints (e.g., `/admin/import-marc`) from GET to POST.
+- **Authentication Privacy:** Removed magic link tokens from server error responses.
+- **Strict RBAC Enforcement:** Implemented field-level update restrictions; moderators can only edit public fields.
+- **Search Optimization:** Integrated `AbortController` into global search to prevent race conditions and Nominatim policy violations.
+- **Field Reporting:** Fully implemented the backend and frontend for community issue reporting (mud, flooding, etc.), including XP rewards for contributors.
+
 
 ## Data Model Updates
 - Added `longevity`, `poster_email`, and `delete_token` to the `features` table.

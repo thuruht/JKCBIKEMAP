@@ -84,6 +84,7 @@ export function updateInfoCard(f, infoCardElement, userPermissions = []) {
 
     <div style="display: flex; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-2);">
       <button class="jump-btn" id="checkInBtn" style="padding: 8px 16px; font-size: 12px; font-weight: 700; background: var(--color-primary); color: white; border: none; display: none;">Check-In Here</button>
+      <button class="jump-btn" id="reportIssueBtn" style="padding: 8px 16px; font-size: 12px; font-weight: 700; background: var(--color-surface-offset); border: 1px solid var(--color-border); display: none;">Report Issue</button>
       <button class="jump-btn" id="shareFeatureBtn" style="padding: 8px 16px; font-size: 12px; font-weight: 700; background: var(--color-surface-offset); border: 1px solid var(--color-border);">Share</button>
       ${f.poster_email ? `<button class="jump-btn" id="deleteFeatureBtn" style="padding: 8px 12px; font-size: 11px; background: #fee2e2ff; color: #991b1bff; border: 1px solid #fecacaff; font-weight: 600;">Delete My Report</button>` : ''}
     </div>
@@ -232,6 +233,19 @@ export function updateInfoCard(f, infoCardElement, userPermissions = []) {
         alert('Link copied to clipboard!');
       }
     };
+  }
+
+  const reportBtn = document.getElementById('reportIssueBtn');
+  if (reportBtn) {
+    if (window.currentUser && hasPermission(userPermissions, "report.create")) {
+      reportBtn.style.display = 'block';
+      reportBtn.onclick = () => {
+        document.getElementById('r_feature_id').value = f.id;
+        document.getElementById('reportModal').style.display = 'flex';
+      };
+    } else {
+      reportBtn.style.display = 'none';
+    }
   }
 
   const delBtn = document.getElementById('deleteFeatureBtn');

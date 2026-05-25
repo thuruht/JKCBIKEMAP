@@ -378,6 +378,27 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     }
 
     // 4. Moderation: Hide Feature/Comment
+    if (method === "POST" && path === "reports") {
+      if (!hasPermission(role, "report.create")) return new Response("Unauthorized", { status: 401 });
+
+      const { feature_id, report_type, description } = await request.json() as any;
+      if (!feature_id || !report_type) return new Response("feature_id and report_type required", { status: 400 });
+
+      const id = crypto.randomUUID();
+      await env.DB.prepare(`
+        INSERT INTO reports (id, feature_id, report_type, description, status)
+        VALUES (?, ?, ?, ?, 'active')
+      `).bind(id, feature_id, report_type, description || null).run();
+
+      // Award XP for reporting
+      if (user) {
+        await env.DB.prepare("UPDATE users SET reputation_score = reputation_score + 5 WHERE id = ?")
+          .bind(user.user_id).run();
+      }
+
+      return jsonResponse({ success: true, id }, 200, request);
+    }
+
     if (method === "POST" && path === "moderation/hide") {
       const { type, id } = await request.json() as { type: 'feature' | 'comment', id: string };
       if (!id) return new Response("ID required", { status: 400 });

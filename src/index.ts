@@ -42,51 +42,52 @@ const RBAC_SCHEMA: Record<string, string[]> = {
     "user.profile.public.read"
   ],
   "moderator": [
-    "feature.public.read",
-    "feature.sensitive.moderation_read",
-    "feature.any.read_metadata",
-    "feature.any.update_public_fields",
-    "feature.any.update_geometry",
-    "feature.any.hide",
-    "feature.any.soft_delete",
-    "feature.any.lock",
-    "feature.sensitive.redact_public",
-    "comment.any.read",
-    "comment.any.hide",
-    "comment.any.delete",
-    "comment.thread.lock",
-    "report.read",
-    "report.resolve",
-    "user.profile.public.read",
-    "user.comment_mute.temporary"
+  "feature.public.read",
+  "feature.sensitive.moderation_read",
+  "feature.any.read_metadata",
+  "feature.any.update_public_fields",
+  "feature.any.update_geometry",
+  "feature.any.hide",
+  "feature.any.soft_delete",
+  "feature.any.lock",
+  "feature.sensitive.redact_public",
+  "feature.bulk_import",
+  "comment.any.read",
+  "comment.any.hide",
+  "comment.any.delete",
+  "comment.thread.lock",
+  "report.read",
+  "report.resolve",
+  "user.profile.public.read",
+  "user.comment_mute.temporary"
   ],
   "admin": [
-    "feature.public.read",
-    "feature.sensitive.read",
-    "feature.any.read",
-    "feature.any.create",
-    "feature.any.update",
-    "feature.any.hide",
-    "feature.any.soft_delete",
-    "feature.any.hard_delete",
-    "feature.sensitive.toggle",
-    "feature.import_official",
-    "comment.any.read",
-    "comment.any.hide",
-    "comment.any.delete",
-    "comment.thread.lock",
-    "report.read",
-    "report.resolve",
-    "user.profile.public.read",
-    "user.reputation.adjust",
-    "user.role.assign",
-    "user.ban.permanent",
-    "badge.assign",
-    "system.settings.update",
-    "moderation.audit.read"
+  "feature.public.read",
+  "feature.sensitive.read",
+  "feature.any.read",
+  "feature.any.create",
+  "feature.any.update",
+  "feature.any.hide",
+  "feature.any.soft_delete",
+  "feature.any.hard_delete",
+  "feature.sensitive.toggle",
+  "feature.import_official",
+  "feature.bulk_import",
+  "comment.any.read",
+  "comment.any.hide",
+  "comment.any.delete",
+  "comment.thread.lock",
+  "report.read",
+  "report.resolve",
+  "user.profile.public.read",
+  "user.reputation.adjust",
+  "user.role.assign",
+  "user.ban.permanent",
+  "badge.assign",
+  "system.settings.update",
+  "moderation.audit.read"
   ]
-};
-
+  };
 function hasPermission(role: string, permission: string): boolean {
   const perms = RBAC_SCHEMA[role] || RBAC_SCHEMA["public"];
   return perms.includes(permission);
@@ -664,9 +665,59 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       }), 200, request);
     }
 
+    if (method === "POST" && path === "features/bulk") {
+      if (!hasPermission(role, "feature.bulk_import")) return new Response("Unauthorized", { status: 401 });
+      
+      // Simple spam protection for bulk import: 100 features per hour
+      if (user) {
+        const { count } = await env.DB.prepare(`
+          SELECT COUNT(*) as count FROM features 
+          WHERE owner_id = ? AND created_at > datetime('now', '-1 hour')
+        `).bind(user.user_id).first() as { count: number };
+        
+        if (count >= 100) {
+          return jsonResponse({ error: "Bulk rate limit exceeded." }, 429, request);
+        }
+      }
+
+      const { features: bulkFeatures } = await request.json() as { features: any[] };
+      if (!bulkFeatures || !Array.isArray(bulkFeatures)) return new Response("Invalid bulk data", { status: 400 });
+
+      let count = 0;
+      for (const feat of bulkFeatures) {
+        const id = crypto.randomUUID();
+        const slug = (feat.name || 'imported').toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + Math.random().toString(36).slice(2, 5);
+        
+        await env.DB.prepare(`
+          INSERT INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, owner_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(id, slug, feat.name || 'Unnamed', feat.feature_type || 'point', feat.category || 'Imported', feat.status || 'active',
+          feat.visibility || 'public', feat.officiality || 'official', feat.public_description || null, user?.user_id || null).run();
+
+        await env.DB.prepare("INSERT INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
+          .bind(id, JSON.stringify(feat.geometry || null)).run();
+        
+        count++;
+      }
+
+      return jsonResponse({ success: true, count }, 200, request);
+    }
+
     if (method === "POST" && path === "features") {
       if (!hasPermission(role, "feature.own.create")) return new Response("Unauthorized", { status: 401 });
       
+      // Simple spam protection: standard users limited to 10 creations per hour
+      if (role === "user" && user) {
+        const { count } = await env.DB.prepare(`
+          SELECT COUNT(*) as count FROM features 
+          WHERE owner_id = ? AND created_at > datetime('now', '-1 hour')
+        `).bind(user.user_id).first() as { count: number };
+        
+        if (count >= 10) {
+          return jsonResponse({ error: "Rate limit exceeded. Please wait before creating more features." }, 429, request);
+        }
+      }
+
       const body = await request.json() as any;
       if (!body.name) return new Response("Name is required", { status: 400 });
       

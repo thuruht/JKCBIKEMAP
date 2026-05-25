@@ -38,6 +38,16 @@ export async function createReport(data) {
   return await res.json();
 }
 
+export async function createFeaturesBulk(features) {
+  const res = await fetch('/api/features/bulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ features })
+  });
+  if (!res.ok) throw new Error('Bulk import failed');
+  return await res.json();
+}
+
 export async function fetchMe() {
   const res = await fetch('/api/me');
   if (!res.ok) throw new Error('Failed to fetch user profile');

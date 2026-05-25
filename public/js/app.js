@@ -419,17 +419,15 @@ async function init() {
         try {
           const geojson = JSON.parse(event.target.result);
           if (!geojson.features || !Array.isArray(geojson.features)) throw new Error("Invalid GeoJSON.");
-          
-          let count = 0;
           importGeoJsonBtn.disabled = true;
           importGeoJsonBtn.textContent = 'Importing...';
           
-          for (const feat of geojson.features) {
+          const featuresToImport = geojson.features.map(feat => {
             const geom = feat.geometry;
             const props = feat.properties || {};
-            if (!geom) continue;
+            if (!geom) return null;
             
-            const data = {
+            return {
               name: props.name || 'Imported Feature',
               feature_type: geom.type === 'Point' ? 'point' : 'line',
               category: props.category || 'Trail spines',
@@ -439,16 +437,16 @@ async function init() {
               public_description: props.public_description || '',
               geometry: geom
             };
-            
-            try {
-              await createFeature(data);
-              count++;
-            } catch (err) {
-              console.warn("Failed import:", data.name, err);
-            }
+          }).filter(Boolean);
+
+          try {
+            const { createFeaturesBulk } = await import('./api.js');
+            const result = await createFeaturesBulk(featuresToImport);
+            alert(`Imported ${result.count} features.`);
+            await refreshData();
+          } catch (err) {
+            alert("Bulk import failed: " + err.message);
           }
-          alert(`Imported ${count} features.`);
-          await refreshData();
         } catch (err) {
           alert("Error: " + err.message);
         } finally {

@@ -78,7 +78,9 @@ a{color:inherit} button{font:inherit;cursor:pointer;background:none;border:none}
 .brand{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-2)}
 .logo{display:flex;gap:var(--space-3);align-items:flex-start}
 .logo svg{width:32px;height:32px;color:var(--color-primary);flex:none}
-h1{font-family:var(--font-display);font-size:var(--text-xl);line-height:1.05;letter-spacing:-0.01em;font-weight:400}
+h1{font-family:var(--font-display);font-size:var(--text-xl);line-height:1.05;letter-spacing:-0.01em;font-weight:400; text-shadow: 0 0 3px rgba(255, 170, 0, 0.589), 0 3px 0 rgba(138, 0, 119, 0.514);
+}.brand-text{display:flex;flex-direction:column}
+
 .lede{font-size:var(--text-sm);color:var(--color-text-muted);max-width:32ch;margin-top:var(--space-2);line-height:1.4}
 
 .controls-group { display: flex; flex-direction: column; gap: var(--space-4); }

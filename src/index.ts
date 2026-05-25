@@ -92,6 +92,30 @@ function hasPermission(role: string, permission: string): boolean {
   return perms.includes(permission);
 }
 
+async function recordRevision(env: Env, featureId: string, actor: string, prevState: any, newState: any) {
+  try {
+    const changedFields = prevState 
+      ? Object.keys(newState).filter(k => JSON.stringify(newState[k]) !== JSON.stringify(prevState[k])) 
+      : Object.keys(newState);
+    
+    if (prevState && changedFields.length === 0) return; // No change
+
+    await env.DB.prepare(`
+      INSERT INTO feature_revisions (id, feature_id, actor, changed_fields, previous_state, new_state)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(
+      crypto.randomUUID(),
+      featureId,
+      actor,
+      JSON.stringify(changedFields),
+      prevState ? JSON.stringify(prevState) : null,
+      JSON.stringify(newState)
+    ).run();
+  } catch (err) {
+    console.error("Failed to record revision:", err);
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -106,11 +130,16 @@ export default {
       return handleApiRequest(request, env, url);
     }
 
+    // Serve index.html for rider vanity URLs to support SPA routing
+    if (url.pathname.startsWith("/rider/")) {
+      return env.ASSETS.fetch(new Request(new URL("/index.html", url.origin), request));
+    }
+
     // Serve static assets with CSP
     const response = await env.ASSETS.fetch(request);
     const newHeaders = new Headers(response.headers);
     // Relaxed CSP to allow internal scripts, Leaflet, GSAP, and Cloudflare Analytics
-    const csp = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org https://*.vis.earthdata.nasa.gov https://*.arcgisonline.com https://*.tile-cyclosm.openstreetmap.fr https://mt1.google.com https://*.tile.thunderforest.com https://*.tile.openstreetmap.fr https://tile.osm.ch https://tile.memomaps.de https://*.tiles.openrailwaymap.org https://tile.waymarkedtrails.org; connect-src 'self' https://overpass-api.de https://overpass.osm.ch https://nominatim.openstreetmap.org https://cloudflareinsights.com https://*.cloudflareinsights.com;";
+    const csp = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org https://*.vis.earthdata.nasa.gov https://*.arcgisonline.com https://*.tile-cyclosm.openstreetmap.fr https://mt1.google.com https://*.tile.thunderforest.com https://*.tile.openstreetmap.fr https://tile.osm.ch https://tile.memomaps.de https://*.tiles.openrailwaymap.org https://tile.waymarkedtrails.org; connect-src 'self' wss://chat.jojomap.kcmo.xyz wss://chat.map.distorted.work https://overpass-api.de https://overpass.osm.ch https://nominatim.openstreetmap.org https://cloudflareinsights.com https://*.cloudflareinsights.com;";
     newHeaders.set("Content-Security-Policy", csp);
     
     return new Response(response.body, {
@@ -161,7 +190,41 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
   }
 
   if (method === "GET" && path === "verify") {
-    // ... verification logic ...
+    const token = url.searchParams.get("token");
+    if (!token) return new Response("Invalid token", { status: 400 });
+
+    const authRecord = await env.DB.prepare("SELECT email FROM auth_tokens WHERE token = ? AND expires_at > CURRENT_TIMESTAMP").bind(token).first() as { email: string } | null;
+
+    if (!authRecord) {
+      return new Response("Token invalid or expired", { status: 401 });
+    }
+
+    // Find or create user
+    let user = await env.DB.prepare("SELECT id FROM users WHERE email = ?").bind(authRecord.email).first() as { id: string } | null;
+    
+    if (!user) {
+      const id = crypto.randomUUID();
+      await env.DB.prepare("INSERT INTO users (id, email) VALUES (?, ?)").bind(id, authRecord.email).run();
+      user = { id };
+    }
+
+    // Create session
+    const sessionToken = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+
+    await env.DB.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)").bind(sessionToken, user.id, expiresAt).run();
+
+    // Delete used auth token
+    await env.DB.prepare("DELETE FROM auth_tokens WHERE token = ?").bind(token).run();
+
+    // Redirect to home with cookie
+    return new Response(null, {
+      status: 302,
+      headers: {
+        "Location": "/",
+        "Set-Cookie": `session=${sessionToken}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${30 * 24 * 60 * 60}`
+      }
+    });
   }
 
   if (method === "POST" && path === "logout") {
@@ -257,7 +320,14 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
   try {
     const method = request.method;
     const fullPath = url.pathname;
-    const path = fullPath.startsWith("/api/") ? fullPath.replace("/api/", "") : fullPath.replace("/", "");
+    let path = fullPath.startsWith("/api/") ? fullPath.replace("/api/", "") : fullPath.replace("/", "");
+
+    // Alias rider -> profiles for more intuitive API endpoints
+    if (path.startsWith("rider/")) {
+      path = path.replace("rider/", "profiles/");
+    } else if (path === "rider") {
+      path = "profiles";
+    }
 
     const cookieHeader = request.headers.get("Cookie") || "";
     const sessionToken = cookieHeader.split(";").find(c => c.trim().startsWith("session="))?.split("=")[1];
@@ -268,7 +338,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     // 1. Resolve User and Role
     if (sessionToken) {
       const session = await env.DB.prepare(`
-        SELECT s.*, u.email, u.role, u.reputation_score, u.username, u.bio, u.avatar_url, u.social_links
+        SELECT s.*, u.email, u.role, u.reputation_score, u.username, u.bio, u.avatar_url, u.social_links, u.public_key
         FROM sessions s
         JOIN users u ON s.user_id = u.id
         WHERE s.token = ? AND s.expires_at > CURRENT_TIMESTAMP
@@ -277,6 +347,10 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       if (session) {
         user = session;
         role = session.role || "user";
+        // Auto-promote user to contributor if they have enough XP
+        if (role === "user" && (session.reputation_score || 0) >= 50) {
+          role = "contributor";
+        }
       }
     }
 
@@ -333,6 +407,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       return jsonResponse({
         authenticated: true,
         user: {
+          id: user.user_id,
           email: user.email,
           role: user.role,
           reputation_score: user.reputation_score,
@@ -340,7 +415,8 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
           username: user.username,
           bio: user.bio,
           avatar_url: user.avatar_url,
-          social_links: user.social_links ? JSON.parse(user.social_links) : []
+          social_links: user.social_links ? JSON.parse(user.social_links) : [],
+          public_key: user.public_key
         },
         badges: badges.results,
         preferences
@@ -349,7 +425,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
 
     if (method === "PUT" && path === "me/profile") {
       if (!user) return new Response("Unauthorized", { status: 401 });
-      const { username, bio, social_links } = await request.json() as any;
+      const { username, bio, social_links, public_key } = await request.json() as any;
 
       if (username) {
         // Validate uniqueness if changing username
@@ -362,8 +438,8 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       }
 
       await env.DB.prepare(`
-        UPDATE users SET username = ?, bio = ?, social_links = ? WHERE id = ?
-      `).bind(username || null, bio || null, social_links ? JSON.stringify(social_links) : null, user.user_id).run();
+        UPDATE users SET username = ?, bio = ?, social_links = ?, public_key = COALESCE(?, public_key) WHERE id = ?
+      `).bind(username || null, bio || null, social_links ? JSON.stringify(social_links) : null, public_key || null, user.user_id).run();
 
       return jsonResponse({ success: true });
     }
@@ -406,12 +482,19 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       const username = path.split("/")[1];
       if (!username) return new Response("Username required", { status: 400 });
 
+      // Resilient lookup: check vanity username, email prefix (fallback), or UUID
       const profile = await env.DB.prepare(`
-        SELECT id, username, bio, avatar_url, social_links, reputation_score, created_at 
-        FROM users WHERE username = ?
-      `).bind(username).first() as any;
+        SELECT id, username, bio, avatar_url, social_links, reputation_score, created_at, public_key 
+        FROM users 
+        WHERE username = ? 
+           OR (username IS NULL AND email LIKE ? || '@%')
+           OR id = ?
+      `).bind(username, username, username).first() as any;
 
       if (!profile) return new Response("Profile not found", { status: 404 });
+
+      // Use the resolved username or fallback
+      const effectiveUsername = profile.username || username;
 
       // Fetch user's public features
       const features = await env.DB.prepare(`
@@ -430,12 +513,14 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
 
       return jsonResponse({
         profile: {
-          username: profile.username,
+          id: profile.id,
+          username: effectiveUsername,
           bio: profile.bio,
           avatar_url: profile.avatar_url,
           social_links: profile.social_links ? JSON.parse(profile.social_links) : [],
           reputation_score: profile.reputation_score,
-          created_at: profile.created_at
+          created_at: profile.created_at,
+          public_key: profile.public_key
         },
         features: features.results,
         badges: badges.results
@@ -447,6 +532,50 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       const body = await request.json();
       await env.KV.put(`prefs:${user.user_id}`, JSON.stringify(body));
       return jsonResponse({ success: true });
+    }
+
+    if (method === "GET" && path === "me/chat-token") {
+      if (!user) return new Response("Unauthorized", { status: 401 });
+      // In a real app we might issue a signed JWT. Here we just return the session token 
+      // since the chat worker also checks the sessions table directly!
+      return jsonResponse({ token: sessionToken });
+    }
+
+    if (method === "GET" && path === "profiles") {
+      const { results } = await env.DB.prepare(`
+        SELECT id, username, avatar_url, reputation_score 
+        FROM users 
+        WHERE username IS NOT NULL 
+        ORDER BY reputation_score DESC LIMIT 100
+      `).all();
+      return jsonResponse(results);
+    }
+
+    if (method === "GET" && path === "community/stats") {
+      // 1. Activity Stream: Latest 10 features or comments
+      const activity = await env.DB.prepare(`
+        SELECT 'feature' as type, name as title, created_at, owner_id as user_id, 
+               (SELECT username FROM users WHERE id = owner_id) as username
+        FROM features WHERE visibility = 'public'
+        UNION ALL
+        SELECT 'comment' as type, body as title, created_at, user_id,
+               (SELECT username FROM users WHERE id = user_id) as username
+        FROM comments
+        ORDER BY created_at DESC LIMIT 10
+      `).all();
+
+      // 2. Global Totals
+      const stats = await env.DB.prepare(`
+        SELECT 
+          (SELECT COUNT(*) FROM features) as total_features,
+          (SELECT COUNT(*) FROM reports WHERE status = 'active') as active_reports,
+          (SELECT COUNT(*) FROM users WHERE username IS NOT NULL) as active_members
+      `).first();
+
+      return jsonResponse({
+        activity: activity.results,
+        stats
+      });
     }
 
     if (method === "GET" && path === "amenities") {
@@ -534,6 +663,9 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       await env.DB.prepare("INSERT INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
         .bind(id, JSON.stringify(body.geometry || null)).run();
 
+      // Record Initial Revision
+      await recordRevision(env, id, user?.email || body.poster_email || 'anonymous', null, body);
+
       if (body.sources) {
         for (const s of body.sources) {
           await env.DB.prepare("INSERT INTO feature_sources (id, feature_id, source_url, source_note) VALUES (?, ?, ?, ?)")
@@ -548,9 +680,16 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       const id = path.split("/")[1];
       const body = await request.json() as any;
       
-      const feature = await env.DB.prepare("SELECT owner_id FROM features WHERE id = ?").bind(id).first() as { owner_id: string } | null;
+      const feature = await env.DB.prepare(`
+        SELECT f.*, g.public_geometry as geometry 
+        FROM features f 
+        LEFT JOIN feature_geometries g ON f.id = g.feature_id 
+        WHERE f.id = ?
+      `).bind(id).first() as any;
+
+      if (!feature) return new Response("Not Found", { status: 404 });
       
-      const isOwner = user && feature?.owner_id === user.user_id;
+      const isOwner = user && feature.owner_id === user.user_id;
       const canEditAny = hasPermission(role, "feature.any.update");
       const canEditPublic = hasPermission(role, "feature.any.update_public_fields");
 
@@ -558,13 +697,9 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         return new Response("Unauthorized", { status: 401 });
       }
 
-      // If only canEditPublic, we must restrict what fields are updated
-      // For now, simplicity: moderators can edit most things, but not visibility if it's toggle-restricted
-      if (canEditPublic && !canEditAny && !isOwner) {
-        if (body.visibility && body.visibility !== feature?.owner_id) { // This check is weak, but placeholder for policy
-           // Add logic for redact_public vs toggle
-        }
-      }
+      // Prepare previous state for revision (parse geometry string to object)
+      const prevState = { ...feature };
+      try { if (typeof prevState.geometry === 'string') prevState.geometry = JSON.parse(prevState.geometry); } catch(e) {}
 
       await env.DB.prepare(`
         UPDATE features SET 
@@ -580,6 +715,9 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         await env.DB.prepare("UPDATE feature_geometries SET public_geometry = ? WHERE feature_id = ?")
           .bind(JSON.stringify(body.geometry), id).run();
       }
+
+      // Record Revision
+      await recordRevision(env, id, user?.email || 'anonymous', prevState, body);
 
       if (body.sources) {
         await env.DB.prepare("DELETE FROM feature_sources WHERE feature_id = ?").bind(id).run();

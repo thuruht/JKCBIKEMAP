@@ -1,0 +1,158 @@
+import { getLocalPrivateKey, importPublicKey, deriveSharedSecret, encryptMessage, decryptMessage } from './crypto.js';
+import { fetchChatToken } from './api.js';
+
+let ws = null;
+let currentSharedSecret = null;
+let currentChatId = null;
+
+export async function openChat(currentUser, targetUser) {
+  const chatModal = document.getElementById('chatModal');
+  const chatMessages = document.getElementById('chatMessages');
+  const chatHeader = document.getElementById('chatHeader');
+  
+  if (!chatModal || !chatMessages || !chatHeader) return;
+
+  // 1. Check if user has generated keys
+  const localPrivateKey = await getLocalPrivateKey();
+  if (!localPrivateKey) {
+    alert("You need to enable DMs first! Go to 'Edit Profile' and click 'Enable Encrypted DMs'.");
+    return;
+  }
+
+  if (!targetUser.public_key) {
+    alert(`${targetUser.username} hasn't enabled Encrypted DMs yet.`);
+    return;
+  }
+
+  // 2. Fetch Chat Token
+  let chatToken;
+  try {
+    const res = await fetchChatToken();
+    chatToken = res.token;
+  } catch (err) {
+    alert("Failed to authenticate chat session.");
+    return;
+  }
+
+  // 3. Derive Shared Secret
+  try {
+    const targetPubKey = await importPublicKey(targetUser.public_key);
+    currentSharedSecret = await deriveSharedSecret(localPrivateKey, targetPubKey);
+  } catch (err) {
+    alert("Cryptographic error establishing secure channel.");
+    return;
+  }
+
+  // 3. Setup Chat UI
+  chatHeader.textContent = `Chat with ${targetUser.username}`;
+  chatMessages.innerHTML = '<div style="text-align:center; opacity:0.5; font-size:10px;">Establishing secure connection...</div>';
+  chatModal.style.display = 'flex';
+
+  // Record as recent chat
+  let recent = JSON.parse(localStorage.getItem('recent_chats') || '[]');
+  if (!recent.find(u => u.username === targetUser.username)) {
+    recent.unshift({ username: targetUser.username, avatar_url: targetUser.avatar_url, id: targetUser.id, public_key: targetUser.public_key });
+    localStorage.setItem('recent_chats', JSON.stringify(recent.slice(0, 20)));
+  }
+
+  // 4. Connect WebSocket
+  // Use deterministic ID: sort by ID to ensure both users join the same room
+  const ids = [currentUser.id, targetUser.id].sort();
+  currentChatId = `${ids[0]}_${ids[1]}`;
+  
+  // Use the same domain the user is currently on, just prefix with chat.
+  const host = window.location.hostname;
+  const wsUrl = `wss://chat.${host}/${currentChatId}?session=${chatToken}`;
+
+  if (ws) ws.close();
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    chatMessages.innerHTML = '<div style="text-align:center; opacity:0.5; font-size:10px; margin-bottom: 8px;">End-to-End Encrypted 🔒</div>';
+  };
+
+  ws.onmessage = async (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === "all") {
+      chatMessages.innerHTML = '<div style="text-align:center; opacity:0.5; font-size:10px; margin-bottom: 8px;">End-to-End Encrypted 🔒</div>';
+      for (const msg of data.messages) {
+        await renderMessage(msg, currentUser);
+      }
+    } else if (data.type === "add") {
+      await renderMessage(data, currentUser);
+    }
+  };
+
+  ws.onerror = (err) => {
+    console.error("WS Error:", err);
+    chatMessages.innerHTML += '<div style="color:red; font-size:10px; text-align:center;">Connection error.</div>';
+  };
+
+  ws.onclose = () => {
+    // chatMessages.innerHTML += '<div style="color:gray; font-size:10px; text-align:center;">Disconnected.</div>';
+  };
+
+  const sendBtn = document.getElementById('chatSendBtn');
+  const input = document.getElementById('chatInput');
+
+  // Remove old listeners by cloning
+  const newSendBtn = sendBtn.cloneNode(true);
+  sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
+
+  newSendBtn.onclick = async () => {
+    const text = input.value.trim();
+    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+    
+    input.value = '';
+    
+    // Encrypt
+    const { ciphertext, iv } = await encryptMessage(text, currentSharedSecret);
+    
+    const payload = {
+      type: "add",
+      id: crypto.randomUUID(),
+      sender: currentUser.username,
+      ciphertext,
+      iv,
+      timestamp: new Date().toISOString()
+    };
+
+    ws.send(JSON.stringify(payload));
+  };
+}
+
+export function closeChat() {
+  const chatModal = document.getElementById('chatModal');
+  if (chatModal) chatModal.style.display = 'none';
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+  currentSharedSecret = null;
+  currentChatId = null;
+}
+
+async function renderMessage(msg, currentUser) {
+  const chatMessages = document.getElementById('chatMessages');
+  if (!chatMessages) return;
+
+  const plaintext = await decryptMessage(msg.ciphertext, msg.iv, currentSharedSecret);
+  
+  const isMe = msg.sender === currentUser.username;
+  const align = isMe ? 'flex-end' : 'flex-start';
+  const bg = isMe ? 'var(--color-primary)' : 'var(--color-surface-offset)';
+  const color = isMe ? 'white' : 'var(--color-text)';
+  
+  const div = document.createElement('div');
+  div.style.cssText = `display: flex; flex-direction: column; align-items: ${align}; margin-bottom: 8px;`;
+  
+  div.innerHTML = `
+    <span style="font-size: 8px; opacity: 0.5; margin-bottom: 2px;">${msg.sender} • ${new Date(msg.timestamp).toLocaleTimeString()}</span>
+    <div style="background: ${bg}; color: ${color}; padding: 6px 10px; border-radius: 12px; font-size: 13px; max-width: 80%; word-break: break-word;">
+      ${plaintext}
+    </div>
+  `;
+  
+  chatMessages.appendChild(div);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}

@@ -17,3 +17,28 @@ Thumbs.db
 # Secrets
 .env
 .env.local
+
+# Sensitive archives (session data)
+*.har
+
+# Generated data audit files
+d1_feature_names.txt
+gnis_kc_filtered.txt
+kc_gnis_ks.txt
+kc_gnis_mo.txt
+
+# Large binary/data files
+*.pdf
+*.zip
+Text/
+[0-9a-f][0-9a-f]*.json
+*.xml
+!package.json
+!wrangler.json
+!tsconfig.json
+
+
+# Design and Screenshots
+*.xcf
+Screenshot*.png
+

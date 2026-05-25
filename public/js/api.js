@@ -84,3 +84,21 @@ export async function fetchProfile(username) {
   if (!res.ok) throw new Error('Profile not found');
   return await res.json();
 }
+
+export async function fetchPublicProfiles() {
+  const res = await fetch('/api/profiles');
+  if (!res.ok) throw new Error('Failed to fetch community profiles');
+  return await res.json();
+}
+
+export async function fetchCommunityStats() {
+  const res = await fetch('/api/community/stats');
+  if (!res.ok) throw new Error('Failed to fetch community activity');
+  return await res.json();
+}
+
+export async function fetchChatToken() {
+  const res = await fetch('/api/me/chat-token');
+  if (!res.ok) throw new Error('Failed to fetch chat token');
+  return await res.json();
+}

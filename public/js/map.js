@@ -8,8 +8,10 @@ const basemaps = {
   dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OpenStreetMap contributors &copy; CARTO', subdomains: 'abcd', maxZoom: 20
   }),
-  night: L.tileLayer('https://map1.vis.earthdata.nasa.gov/wmts-webmerc/VIIRS_CityLights_2012/default/{time}/{tilematrixset}{maxZoom}/{z}/{y}/{x}.{format}', {
-    attribution: '&copy; NASA', bounds: [[-85.0511287776, -179.999999975], [85.0511287776, 179.999999975]], minZoom: 1, maxZoom: 8, format: 'jpg', time: '', tilematrixset: 'GoogleMapsCompatible_Level'
+  night: L.tileLayer('https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/2016-01-01/GoogleMapsCompatible_Level/{z}/{y}/{x}.png', {
+    attribution: '&copy; NASA GIBS',
+    maxNativeZoom: 8,
+    maxZoom: 20
   }),
   esri_dark: L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
     attribution: '&copy; Esri', maxZoom: 16
@@ -83,7 +85,9 @@ let layers = {
 };
 
 export function initLeafletMap(elementId, center, zoom) {
-  map = L.map(elementId).setView(center, zoom);
+  map = L.map(elementId, {
+    attributionControl: false
+  }).setView(center, zoom);
   
   // Default to Pioneer for high-fidelity trail navigation
   currentBasemap = basemaps.pioneer;
@@ -161,7 +165,7 @@ export async function fetchAmenities() {
       marker.on('click', () => {
         const detailCard = document.getElementById('infoCard');
         if (detailCard) {
-          import('./ui.js').then(ui => ui.updateInfoCard(f, detailCard, false));
+          import('./ui.js').then(ui => ui.updateInfoCard(f, detailCard, []));
         }
       });
     });
@@ -262,34 +266,89 @@ export function enableMapPicker(onPicked) {
 }
 
 let tempDrawingLine = null;
-let drawingPoints = [];
+let drawingPoints = []; // User clicked points
+let fullPathPoints = []; // All points including routing segments
+let pathHistory = []; // Stack of fullPathPoints lengths to support Undo
+
+async function fetchRoute(p1, p2) {
+  // project-osrm.org demo server. lon,lat;lon2,lat2
+  const url = `https://router.project-osrm.org/route/v1/bicycle/${p1[0]},${p1[1]};${p2[0]},${p2[1]}?overview=full&geometries=geojson`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (data.code !== 'Ok' || !data.routes || !data.routes.length) return null;
+    return data.routes[0].geometry.coordinates;
+  } catch (err) {
+    console.error("Routing error:", err);
+    return null;
+  }
+}
 
 export function startLineDrawing(onUpdate, onFinish) {
   if (tempDrawingLine) map.removeLayer(tempDrawingLine);
   drawingPoints = [];
-  tempDrawingLine = L.polyline([], { color: '#0ea5e9ff', weight: 4, dashArray: '5 5' }).addTo(map);
+  fullPathPoints = [];
+  pathHistory = [];
   
+  tempDrawingLine = L.polyline([], { color: '#0ea5e9ff', weight: 5, dashArray: '5 5' }).addTo(map);
   map.getContainer().style.cursor = 'crosshair';
   
-  const onClick = (e) => {
+  const onClick = async (e) => {
     const p = [e.latlng.lng, e.latlng.lat];
-    drawingPoints.push(p);
-    tempDrawingLine.setLatLngs(drawingPoints.map(c => [c[1], c[0]]));
-    if (onUpdate) onUpdate(drawingPoints);
+    
+    if (drawingPoints.length === 0) {
+      drawingPoints.push(p);
+      fullPathPoints.push(p);
+      pathHistory.push(1);
+    } else {
+      const lastPoint = drawingPoints[drawingPoints.length - 1];
+      // Try to fetch route from OSRM
+      const segment = await fetchRoute(lastPoint, p);
+      
+      if (segment) {
+        // Add all points except the first one (which is lastPoint)
+        const newPoints = segment.slice(1);
+        fullPathPoints = fullPathPoints.concat(newPoints);
+        pathHistory.push(newPoints.length);
+      } else {
+        // Fallback to straight line if routing fails
+        fullPathPoints.push(p);
+        pathHistory.push(1);
+      }
+      drawingPoints.push(p);
+    }
+
+    tempDrawingLine.setLatLngs(fullPathPoints.map(c => [c[1], c[0]]));
+    if (onUpdate) onUpdate(fullPathPoints);
   };
   
   map.on('click', onClick);
 
-  // Return a cleanup/finish function
+  // Undo Logic
+  const undoBtn = document.getElementById('undoDrawingBtn');
+  const onUndo = () => {
+    if (pathHistory.length === 0) return;
+    const lastBatchSize = pathHistory.pop();
+    fullPathPoints.splice(-lastBatchSize);
+    drawingPoints.pop();
+    tempDrawingLine.setLatLngs(fullPathPoints.map(c => [c[1], c[0]]));
+    if (onUpdate) onUpdate(fullPathPoints);
+  };
+  if (undoBtn) undoBtn.onclick = onUndo;
+
   return () => {
     map.off('click', onClick);
+    if (undoBtn) undoBtn.onclick = null;
     map.getContainer().style.cursor = '';
-    const finalPoints = [...drawingPoints];
+    const finalPoints = [...fullPathPoints];
     if (tempDrawingLine) {
       map.removeLayer(tempDrawingLine);
       tempDrawingLine = null;
     }
     drawingPoints = [];
+    fullPathPoints = [];
+    pathHistory = [];
     if (onFinish) onFinish(finalPoints);
   };
 }

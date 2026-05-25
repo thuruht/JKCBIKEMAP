@@ -84,6 +84,7 @@ export function updateInfoCard(f, infoCardElement, userPermissions = []) {
 
     <div style="display: flex; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-2);">
       <button class="jump-btn" id="checkInBtn" style="padding: 8px 16px; font-size: 12px; font-weight: 700; background: var(--color-primary); color: white; border: none; display: none;">Check-In Here</button>
+      <button class="jump-btn" id="shareFeatureBtn" style="padding: 8px 16px; font-size: 12px; font-weight: 700; background: var(--color-surface-offset); border: 1px solid var(--color-border);">Share</button>
       ${f.poster_email ? `<button class="jump-btn" id="deleteFeatureBtn" style="padding: 8px 12px; font-size: 11px; background: #fee2e2ff; color: #991b1bff; border: 1px solid #fecacaff; font-weight: 600;">Delete My Report</button>` : ''}
     </div>
 
@@ -213,6 +214,26 @@ export function updateInfoCard(f, infoCardElement, userPermissions = []) {
     };
   }
 
+  const shareFeatBtn = document.getElementById('shareFeatureBtn');
+  if (shareFeatBtn) {
+    shareFeatBtn.onclick = async () => {
+      const url = `${window.location.origin}/#feature=${f.id}`;
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: `${f.name} on JOJO's KC Bike Map`,
+            url: url
+          });
+        } catch (err) {
+          console.warn("Share failed:", err);
+        }
+      } else {
+        navigator.clipboard.writeText(url);
+        alert('Link copied to clipboard!');
+      }
+    };
+  }
+
   const delBtn = document.getElementById('deleteFeatureBtn');
   if (delBtn) {
     delBtn.onclick = async () => {
@@ -240,20 +261,22 @@ export function updateInfoCard(f, infoCardElement, userPermissions = []) {
 }
 
 export function switchTab(tabId) {
-  const tabs = ['explore', 'search', 'admin'];
+  const tabs = ['explore', 'search', 'community', 'messages', 'admin'];
   tabs.forEach(t => {
     const btn = document.getElementById(`tab-${t}`);
     const panel = document.getElementById(`panel-${t}`);
     if (t === tabId) {
-      btn.classList.add('active');
-      panel.style.display = 'block';
-      gsap.fromTo(panel, 
-        { opacity: 0, y: 10 }, 
-        { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }
-      );
+      if (btn) btn.classList.add('active');
+      if (panel) {
+        panel.style.display = 'block';
+        gsap.fromTo(panel, 
+          { opacity: 0, y: 10 }, 
+          { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }
+        );
+      }
     } else {
-      btn.classList.remove('active');
-      panel.style.display = 'none';
+      if (btn) btn.classList.remove('active');
+      if (panel) panel.style.display = 'none';
     }
   });
 }
@@ -261,6 +284,7 @@ export function switchTab(tabId) {
 export function openHelpModal() {
   helpModal.style.display = 'grid';
 }
+window.openHelpModal = openHelpModal;
 
 export function closeHelpModal() {
   helpModal.style.display = 'none';
@@ -453,6 +477,16 @@ export function openProfileEditModal(user) {
   const addSocialBtn = document.getElementById('addProfileSocialLinkBtn');
   addSocialBtn.onclick = () => addProfileSocialLinkRow();
 
+  const enableDmsBtn = document.getElementById('enableDmsBtn');
+  const backupSection = document.getElementById('dmBackupSection');
+  if (user.public_key) {
+    enableDmsBtn.style.display = 'none';
+    backupSection.style.display = 'flex';
+  } else {
+    enableDmsBtn.style.display = 'block';
+    backupSection.style.display = 'none';
+  }
+
   document.getElementById('closeProfileModalBtn').onclick = () => {
     profileModal.style.display = 'none';
   };
@@ -474,7 +508,7 @@ function addProfileSocialLinkRow(url = '') {
   container.appendChild(div);
 }
 
-window.openPublicProfileModal = async function(username) {
+export async function openPublicProfileModal(username) {
   const publicModal = document.getElementById('publicProfileModal');
   const content = document.getElementById('publicProfileContent');
   if (!publicModal || !content) return;
@@ -504,18 +538,40 @@ window.openPublicProfileModal = async function(username) {
       
       ${profile.bio ? `<p style="font-size: 13px; line-height: 1.5; margin-bottom: var(--space-4);">${profile.bio}</p>` : ''}
     `;
-
-    if (badges && badges.length > 0) {
-      html += `
-        <div style="margin-bottom: var(--space-4);">
-          <h3 style="font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Badges</h3>
-          <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-            ${badges.map(b => `<div style="padding: 2px 6px; border-radius: 4px; background: var(--color-primary-soft); color: var(--color-primary); font-size: 9px; font-weight: 700; text-transform: uppercase; border: 1px solid var(--color-primary);" title="${b.description}">${b.name}</div>`).join('')}
+if (badges && badges.length > 0) {
+  const badgeParam = window.location.hash.startsWith('#badge=') ? decodeURIComponent(window.location.hash.split('=')[1]) : null;
+  
+  html += `
+    <div style="margin-bottom: var(--space-4);">
+      <h3 style="font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Badges</h3>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; padding: 4px;">
+        ${badges.map(b => {
+          const isHighlighted = b.name === badgeParam;
+          return `
+          <div style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 6px; background: ${isHighlighted ? 'var(--color-primary)' : 'var(--color-primary-soft)'}; border: 1px solid var(--color-primary); transition: all 0.3s ease; ${isHighlighted ? 'transform: scale(1.05); box-shadow: 0 0 12px var(--color-primary);' : ''}">
+            <div style="font-size: 10px; font-weight: 700; color: ${isHighlighted ? 'white' : 'var(--color-primary)'}; text-transform: uppercase;" title="${b.description}">${b.name}</div>
+            <button onclick="event.preventDefault(); window.shareBadge('${b.name}', '${profile.username}')" style="font-size: 10px; opacity: 0.7; cursor: pointer; padding: 0 4px; background: none; border: none; color: ${isHighlighted ? 'white' : 'var(--color-primary)'};">🔗</button>
           </div>
-        </div>
-      `;
-    }
+        `}).join('')}
+      </div>
+    </div>
+  `;
+}
 
+content.innerHTML = html;
+
+window.shareBadge = async (badgeName, username) => {
+  const url = `${window.location.origin}/rider/${username}#badge=${encodeURIComponent(badgeName)}`;
+  const text = `${username} earned the ${badgeName} badge on JOJO's KC Bike Map! 🚲🏆`;
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Badge Earned!', text, url });
+    } catch (err) { console.warn(err); }
+  } else {
+    navigator.clipboard.writeText(`${text} ${url}`);
+    alert('Badge link copied to clipboard!');
+  }
+};
     if (features && features.length > 0) {
       html += `
         <div>
@@ -528,7 +584,43 @@ window.openPublicProfileModal = async function(username) {
     }
 
     content.innerHTML = html;
+
+    const messageBtn = document.getElementById('messageUserBtn');
+    if (messageBtn) {
+      if (window.currentUser && window.currentUser.id !== profile.id && profile.public_key) {
+        messageBtn.style.display = 'block';
+        messageBtn.onclick = async () => {
+          publicModal.style.display = 'none';
+          const chatModule = await import('./chat.js');
+          chatModule.openChat(window.currentUser, profile);
+        };
+      } else {
+        messageBtn.style.display = 'none';
+      }
+    }
+
+    const shareBtn = document.getElementById('shareProfileBtn');
+    if (shareBtn) {
+      shareBtn.onclick = async () => {
+        const url = `${window.location.origin}/rider/${profile.username}`;
+        if (navigator.share) {
+          try {
+            await navigator.share({
+              title: `${profile.username} on JOJO's KC Bike Map`,
+              url: url
+            });
+          } catch (err) {
+            console.warn("Share failed:", err);
+          }
+        } else {
+          navigator.clipboard.writeText(url);
+          alert('Link copied to clipboard!');
+        }
+      };
+    }
+
   } catch (err) {
     content.innerHTML = `<div style="text-align: center; color: red;">${err.message}</div>`;
   }
-};
+}
+window.openPublicProfileModal = openPublicProfileModal;

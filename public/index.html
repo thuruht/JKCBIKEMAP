@@ -22,8 +22,8 @@
         <div class="logo">
           <img src="/byn3.png" alt="JOJO's KC BIKE MAP logo" style="width: 48px; height: 48px; object-fit: contain; border-radius: var(--radius-md);">
           <div>
-            <h1>JOJO's KC BIKE MAP</h1>
-            <p class="lede">Shortcuts, trail alerts, and local secrets — community updated.</p>
+            <h1><span style="font-size: 0.5em; opacity: 0.8; display: block; margin-bottom: -0.1em; letter-spacing: 0.05em;">JOJO's</span> KC BIKE MAP</h1>
+            <p class="lede" style="font-size: 10px; line-height: 1.4; opacity: 0.9;">A community contributed, locally administrated and 100% free of cost cycling info and trail mapping platform for Kansas City & neighbors.</p>
           </div>
         </div>
         <div style="display: flex; gap: var(--space-1);">
@@ -36,7 +36,9 @@
         <div style="display: flex; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden;">
           <button id="tab-explore" class="jump-btn active" style="flex: 1; text-align: center; border: none; border-radius: 0;">Explore</button>
           <button id="tab-search" class="jump-btn" style="flex: 1; text-align: center; border: none; border-radius: 0;">Search</button>
-          <button id="tab-admin" class="jump-btn" style="flex: 1; text-align: center; border: none; border-radius: 0;">Admin</button>
+          <button id="tab-community" class="jump-btn" style="flex: 1; text-align: center; border: none; border-radius: 0; border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border);">Community</button>
+          <button id="tab-messages" class="jump-btn" style="flex: 1; text-align: center; border: none; border-radius: 0; border-right: 1px solid var(--color-border);">DMs</button>
+          <button id="tab-admin" class="jump-btn" style="flex: 1; text-align: center; border: none; border-radius: 0;">Staff</button>
         </div>
       </div>
 
@@ -156,11 +158,16 @@
             </div>
           </div>
 
-          <h2>Navigate</h2>
-          <select id="categorySelect" class="jump-btn" style="width: 100%; padding: var(--space-4); font-weight: 700; font-size: var(--text-base); background: var(--color-surface-offset);">
-            <option value="">All Knowledge Categories</option>
-          </select>
-          <div id="featureTiles" class="tiles-grid"></div>
+          <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-bottom: var(--space-4);" id="toggleNavigateBtn">
+            <h2 style="margin: 0;">Navigate</h2>
+            <span id="navigateChevron">▼</span>
+          </div>
+          <div id="navigateContent">
+            <select id="categorySelect" class="jump-btn" style="width: 100%; padding: var(--space-4); font-weight: 700; font-size: var(--text-base); background: var(--color-surface-offset);">
+              <option value="">All Knowledge Categories</option>
+            </select>
+            <div id="featureTiles" class="tiles-grid"></div>
+          </div>
         </section>
       </div>
 
@@ -170,6 +177,47 @@
           <p style="font-size: 13px; color: var(--color-text-muted); margin-bottom: 12px; font-weight: 500;">Type a trail name, park, or a street address below.</p>
           <input type="text" id="searchInput" placeholder="e.g. Rock Island or 31st & Main" class="jump-btn" style="padding: var(--space-4); font-size: var(--text-base); font-weight: 600;">
           <div id="searchResultsList" class="tiles-grid" style="margin-top: var(--space-4); max-height: 50vh; overflow-y: auto;"></div>
+        </section>
+      </div>
+
+      <div id="panel-community" style="display: none;">
+        <section class="panel">
+          <h2>Community</h2>
+          
+          <div id="communityStats" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: var(--space-6);">
+            <div style="background: var(--color-surface-offset); padding: 8px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 14px; font-weight: 800; color: var(--color-primary);" id="statMembers">-</div>
+              <div style="font-size: 8px; font-weight: 700; opacity: 0.6; text-transform: uppercase;">Members</div>
+            </div>
+            <div style="background: var(--color-surface-offset); padding: 8px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 14px; font-weight: 800; color: var(--color-primary);" id="statFeatures">-</div>
+              <div style="font-size: 8px; font-weight: 700; opacity: 0.6; text-transform: uppercase;">Features</div>
+            </div>
+            <div style="background: var(--color-surface-offset); padding: 8px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 14px; font-weight: 800; color: var(--color-primary);" id="statReports">-</div>
+              <div style="font-size: 8px; font-weight: 700; opacity: 0.6; text-transform: uppercase;">Alerts</div>
+            </div>
+          </div>
+
+          <h3 style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-primary); margin-bottom: 8px;">Top Contributors</h3>
+          <div id="communityList" class="tiles-grid" style="margin-bottom: var(--space-6);">
+            <div style="text-align: center; opacity: 0.5; padding: 10px;">Loading...</div>
+          </div>
+
+          <h3 style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-primary); margin-bottom: 8px;">Recent Activity</h3>
+          <div id="activityStream" style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="text-align: center; opacity: 0.5; padding: 10px;">Loading...</div>
+          </div>
+        </section>
+      </div>
+
+      <div id="panel-messages" style="display: none;">
+        <section class="panel">
+          <h2>Direct Messages</h2>
+          <p class="lede" style="margin-bottom: var(--space-4);">Real-time, end-to-end encrypted conversations.</p>
+          <div id="messagesList" class="tiles-grid">
+            <div style="text-align: center; opacity: 0.5; padding: 20px;">Open a profile from Search or Community to start a chat.</div>
+          </div>
         </section>
       </div>
 
@@ -220,6 +268,7 @@
       <!-- Drawing Controls -->
       <div id="drawing-controls" style="display: none; position: absolute; top: var(--space-4); left: 50%; transform: translateX(-50%); z-index: 1001; background: var(--color-surface); padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); border: 2px solid var(--color-primary); box-shadow: var(--shadow-md); align-items: center; gap: var(--space-3);">
         <p style="font-size: 11px; font-weight: 700; color: var(--color-primary); text-transform: uppercase;">Tracing Route...</p>
+        <button id="undoDrawingBtn" class="jump-btn" style="width: auto; padding: 4px 12px; background: var(--color-bg); color: var(--color-text); border: 1px solid var(--color-border);">Undo</button>
         <button id="finishDrawingBtn" class="jump-btn" style="width: auto; padding: 4px 12px; background: var(--color-primary); color: white; border: none; font-weight: 700;">Finish Line</button>
       </div>
 
@@ -241,6 +290,19 @@
     <div class="modal-content">
       <h2>How to use this map</h2>
       <p style="margin-top: var(--space-3); color: var(--color-text-muted);">Think in corridors, not perfect routes. Brush Creek is your east-west spine; Blue River is your north-south spine; parks, bridges, and neighborhoods help you stitch the rest together.</p>
+      
+      <div style="margin-top: var(--space-5);">
+        <h3 style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-primary); margin-bottom: 8px;">Data & Attributions</h3>
+        <ul style="font-size: 11px; color: var(--color-text-muted); padding-left: 16px; line-height: 1.6;">
+          <li><strong>Map Engine:</strong> Leaflet.js</li>
+          <li><strong>Map Data:</strong> &copy; OpenStreetMap contributors</li>
+          <li><strong>Basemaps:</strong> CARTO, NASA, Esri, Google, USGS, Thunderforest</li>
+          <li><strong>Overlays:</strong> OpenRailwayMap, Waymarked Trails</li>
+          <li><strong>Amenities:</strong> Overpass API (OpenStreetMap)</li>
+          <li><strong>Official Data:</strong> Mid-America Regional Council (MARC)</li>
+        </ul>
+      </div>
+
       <div class="note" style="margin-top: var(--space-4); background: var(--color-surface-offset); padding: var(--space-3); border-radius: var(--radius-md);">
         <strong>Caution:</strong> Hand-built exploration map, not turn-by-turn navigation. Routes and conditions subject to rain, mud, snow, flooding, stray dogs, automobile traffic, law enforcement and other hazards.
       </div>
@@ -399,6 +461,17 @@
           <button type="button" id="closeProfileModalBtn" class="jump-btn" style="flex: 1; text-align: center;">Cancel</button>
           <button type="submit" id="saveProfileBtn" class="jump-btn" style="flex: 1; text-align: center; background: var(--color-primary); color: white;">Save Profile</button>
         </div>
+        <div style="margin-top: var(--space-4); text-align: center; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--color-border); padding-top: var(--space-4);">
+          <button type="button" id="enableDmsBtn" class="jump-btn" style="font-size: 10px; background: var(--color-surface-offset); border: 1px solid var(--color-border);">🔒 Enable Encrypted DMs</button>
+          <div id="dmBackupSection" style="display: none; flex-direction: column; gap: 8px;">
+            <button type="button" id="downloadBackupBtn" class="jump-btn" style="font-size: 10px; background: var(--color-primary-soft); color: var(--color-primary); border: 1px solid var(--color-primary);">💾 Download Key Backup</button>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+               <label for="importKeyFile" style="font-size: 9px; opacity: 0.7; cursor: pointer; text-decoration: underline;">Import Key Backup File</label>
+               <input type="file" id="importKeyFile" style="display: none;" accept=".json">
+            </div>
+          </div>
+          <p style="font-size: 9px; opacity: 0.5;">End-to-End Encrypted. Only your device holds the keys.</p>
+        </div>
       </form>
     </div>
   </div>
@@ -407,6 +480,28 @@
     <div class="modal-content" style="background: var(--color-surface); padding: var(--space-6); border-radius: var(--radius-lg); width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; position: relative;">
       <button id="closePublicProfileBtn" style="position: absolute; top: 12px; right: 12px; width: 24px; height: 24px; border-radius: 999px; background: var(--color-surface-offset); display: grid; place-items: center; font-size: 14px; color: var(--color-text-faint); border: 1px solid var(--color-border); cursor: pointer;">×</button>
       <div id="publicProfileContent">Loading...</div>
+      <div style="display: flex; gap: var(--space-3); margin-top: var(--space-5); border-top: 1px solid var(--color-border); padding-top: var(--space-4);">
+        <button id="messageUserBtn" class="jump-btn" style="flex: 1; background: var(--color-primary); color: white; display: none;">Message</button>
+        <button id="shareProfileBtn" class="jump-btn" style="flex: 1; background: var(--color-surface-offset);">Share Profile</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="chatModal" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center;">
+    <div class="modal-content" style="background: var(--color-surface); border-radius: var(--radius-lg); width: 90%; max-width: 400px; height: 80vh; max-height: 600px; display: flex; flex-direction: column; overflow: hidden; position: relative;">
+      <div style="padding: 16px; background: var(--color-surface-offset); border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center;">
+        <h3 id="chatHeader" style="margin: 0; font-size: 16px;">Chat</h3>
+        <button id="closeChatBtn" style="width: 24px; height: 24px; border-radius: 999px; background: var(--color-bg); display: grid; place-items: center; font-size: 14px; color: var(--color-text-faint); border: 1px solid var(--color-border); cursor: pointer;">×</button>
+      </div>
+      
+      <div id="chatMessages" style="flex: 1; padding: 16px; overflow-y: auto; background: var(--color-bg); display: flex; flex-direction: column;">
+        <!-- Messages appear here -->
+      </div>
+      
+      <div style="padding: 12px; background: var(--color-surface-offset); border-top: 1px solid var(--color-border); display: flex; gap: 8px;">
+        <input type="text" id="chatInput" placeholder="Type a message..." style="flex: 1; padding: 8px 12px; border-radius: 16px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text);">
+        <button id="chatSendBtn" class="jump-btn" style="padding: 8px 16px; border-radius: 16px; background: var(--color-primary); color: white; width: auto;">Send</button>
+      </div>
     </div>
   </div>
 

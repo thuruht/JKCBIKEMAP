@@ -1,4 +1,4 @@
-import { fetchFeatures, createFeature, updateFeature, fetchMe, assignUserRole } from './api.js';
+import { fetchFeatures, createFeature, updateFeature, fetchMe, assignUserRole, fetchPublicProfiles, fetchCommunityStats } from './api.js';
 import { initLeafletMap, renderMap, flyToFeature, enableMapPicker, toggleLayer, fetchAmenities, map, switchBasemap, toggleOverlay, startLineDrawing } from './map.js';
 import { updateInfoCard, renderLegend, initThemeToggle, openModal, closeModal, openHelpModal, closeHelpModal, switchTab } from './ui.js';
 import { downloadGeoJSON, getCategoryMeta } from './utils.js';
@@ -30,6 +30,8 @@ const featureActions = document.getElementById('featureActions');
 // Tabs
 const tabExplore = document.getElementById('tab-explore');
 const tabSearch = document.getElementById('tab-search');
+const tabCommunity = document.getElementById('tab-community');
+const tabMessages = document.getElementById('tab-messages');
 const tabAdmin = document.getElementById('tab-admin');
 
 // User Auth Elements
@@ -68,8 +70,8 @@ function updateAdminUI() {
   }
   
   if (allFeatures.length) {
-    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isStaff || isAdmin), handleMarkerDrag, isStaff || isAdmin);
-    renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isStaff || isAdmin)));
+    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, userPermissions), handleMarkerDrag, isStaff || isAdmin);
+    renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, userPermissions)));
   }
 }
 
@@ -77,8 +79,8 @@ async function refreshData() {
   try {
     allFeatures = await fetchFeatures();
     const isStaff = hasPermission('feature.any.hide') || hasPermission('feature.any.update_public_fields') || hasPermission('user.role.assign');
-    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isStaff), handleMarkerDrag, isStaff);
-    renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isStaff)));
+    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, userPermissions), handleMarkerDrag, isStaff);
+    renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, userPermissions)));
   } catch (err) {
     console.error('Failed to fetch features:', err);
   }
@@ -117,6 +119,21 @@ function initCryptAnimations() {
 }
 
 async function init() {
+  const basemapSelect = document.getElementById('basemapSelect');
+  const saveDefaultBasemapBtn = document.getElementById('saveDefaultBasemapBtn');
+
+  // Toggle Navigate Section
+  const toggleNavigateBtn = document.getElementById('toggleNavigateBtn');
+  const navigateContent = document.getElementById('navigateContent');
+  const navigateChevron = document.getElementById('navigateChevron');
+  if (toggleNavigateBtn && navigateContent) {
+    toggleNavigateBtn.onclick = () => {
+      const isHidden = navigateContent.style.display === 'none';
+      navigateContent.style.display = isHidden ? 'block' : 'none';
+      if (navigateChevron) navigateChevron.textContent = isHidden ? '▼' : '▶';
+    };
+  }
+
   initThemeToggle();
   initLeafletMap('map', [39.03, -94.535], 12);
   
@@ -132,6 +149,15 @@ async function init() {
   await refreshData();
   initCryptAnimations();
 
+  // Handle vanity URLs (/rider/username)
+  if (window.location.pathname.startsWith('/rider/')) {
+    const parts = window.location.pathname.split('/');
+    const username = parts[2];
+    if (username) {
+      import('./ui.js').then(ui => ui.openPublicProfileModal(username));
+    }
+  }
+
   const searchResultsList = document.getElementById('searchResultsList');
 
   let searchTimeout;
@@ -142,12 +168,13 @@ async function init() {
 
       if (!q) {
         if (searchResultsList) searchResultsList.innerHTML = '';
-        renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, isStaff), handleMarkerDrag, isStaff);
+        renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, userPermissions), handleMarkerDrag, isStaff);
         return;
       }
 
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(async () => {
+        // 1. Filter Local Knowledge
         const filtered = allFeatures.filter(f =>
           f.name.toLowerCase().includes(q) ||
           (f.public_description && f.public_description.toLowerCase().includes(q)) ||
@@ -156,14 +183,55 @@ async function init() {
 
         if (searchResultsList) {
           searchResultsList.innerHTML = '';
-          filtered.forEach(f => {
-            const tile = document.createElement('div');
-            tile.className = 'tile-btn';
-            tile.style.borderLeft = `4px solid ${getCategoryMeta(f.category).swatch}`;
-            tile.innerHTML = `<div><strong>${f.name}</strong><br><small style="font-size:9px; opacity:0.7;">${f.category}</small></div>`;
-            tile.onclick = () => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, isStaff));
-            searchResultsList.appendChild(tile);
-          });
+          
+          // --- New: Search for Users ---
+          try {
+            const profiles = await fetchPublicProfiles();
+            const matchedUsers = profiles.filter(p => p.username && p.username.toLowerCase().includes(q));
+            if (matchedUsers.length > 0) {
+              const uDivider = document.createElement('div');
+              uDivider.style.cssText = 'font-size:9px; text-transform:uppercase; font-weight:700; margin: 0 0 4px; opacity:0.5;';
+              uDivider.textContent = 'Community Members';
+              searchResultsList.appendChild(uDivider);
+
+              matchedUsers.forEach(u => {
+                const tile = document.createElement('div');
+                tile.className = 'tile-btn';
+                tile.style.display = 'flex';
+                tile.style.alignItems = 'center';
+                tile.style.gap = '8px';
+                tile.style.borderLeft = '4px solid var(--color-primary)';
+                tile.innerHTML = `
+                  <img src="${u.avatar_url || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23ccc%22/></svg>'}" style="width:20px; height:20px; border-radius:50%; object-fit:cover;">
+                  <div><strong>${u.username}</strong></div>
+                `;
+                tile.onclick = () => import('./ui.js').then(ui => ui.openPublicProfileModal(u.username));
+                searchResultsList.appendChild(tile);
+              });
+              
+              const spacer = document.createElement('div');
+              spacer.style.height = '12px';
+              searchResultsList.appendChild(spacer);
+            }
+          } catch (e) {
+            console.warn("User search failed:", e);
+          }
+
+          if (filtered.length > 0) {
+            const fDivider = document.createElement('div');
+            fDivider.style.cssText = 'font-size:9px; text-transform:uppercase; font-weight:700; margin: 0 0 4px; opacity:0.5;';
+            fDivider.textContent = 'Map Features';
+            searchResultsList.appendChild(fDivider);
+
+            filtered.forEach(f => {
+              const tile = document.createElement('div');
+              tile.className = 'tile-btn';
+              tile.style.borderLeft = `4px solid ${getCategoryMeta(f.category).swatch}`;
+              tile.innerHTML = `<div><strong>${f.name}</strong><br><small style="font-size:9px; opacity:0.7;">${f.category}</small></div>`;
+              tile.onclick = () => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, userPermissions));
+              searchResultsList.appendChild(tile);
+            });
+          }
 
           try {
             const nomResp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&viewbox=-95.1,39.3,-94.1,38.7&bounded=1`);
@@ -191,7 +259,7 @@ async function init() {
           }
         }
 
-        renderMap(filtered, allFeatures.length, (f) => updateInfoCard(f, infoCard, isStaff), handleMarkerDrag, isStaff);
+        renderMap(filtered, allFeatures.length, (f) => updateInfoCard(f, infoCard, userPermissions), handleMarkerDrag, isStaff);
       }, 400);
     });
   }
@@ -226,15 +294,12 @@ async function init() {
     });
   }
 
-  // Basemap Selector
-  const basemapSelect = document.getElementById('basemapSelect');
-  const saveDefaultBasemapBtn = document.getElementById('saveDefaultBasemapBtn');
-
   async function checkUserAuth() {
     try {
       const data = await fetchMe();
       if (data.authenticated) {
         currentUser = data.user;
+        window.currentUser = currentUser;
         userPermissions = data.user.permissions || [];
         
         if (userLoggedOutView) userLoggedOutView.style.display = 'none';
@@ -403,6 +468,105 @@ async function init() {
 
   if (tabExplore) tabExplore.addEventListener('click', () => switchTab('explore'));
   if (tabSearch) tabSearch.addEventListener('click', () => switchTab('search'));
+  if (tabMessages) {
+    tabMessages.addEventListener('click', () => {
+      switchTab('messages');
+      const list = document.getElementById('messagesList');
+      if (!list) return;
+
+      const recent = JSON.parse(localStorage.getItem('recent_chats') || '[]');
+      if (recent.length === 0) {
+        list.innerHTML = '<div style="text-align:center; opacity:0.5; padding:20px;">No recent conversations. Find a rider in the Community tab to start a chat!</div>';
+      } else {
+        list.innerHTML = '';
+        recent.forEach(u => {
+          const tile = document.createElement('div');
+          tile.className = 'tile-btn';
+          tile.style.display = 'flex';
+          tile.style.alignItems = 'center';
+          tile.style.gap = '12px';
+          tile.innerHTML = `
+            <img src="${u.avatar_url || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23ccc%22/></svg>'}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
+            <div style="flex:1;">
+              <div style="font-weight:700;">${u.username}</div>
+              <div style="font-size:9px; opacity:0.6;">Encrypted Tunnel Active 🔒</div>
+            </div>
+          `;
+          tile.onclick = async () => {
+            const chatModule = await import('./chat.js');
+            chatModule.openChat(currentUser, u);
+          };
+          list.appendChild(tile);
+        });
+      }
+    });
+  }
+  if (tabCommunity) {
+    tabCommunity.addEventListener('click', async () => {
+      switchTab('community');
+      const list = document.getElementById('communityList');
+      const activityStream = document.getElementById('activityStream');
+      const statMembers = document.getElementById('statMembers');
+      const statFeatures = document.getElementById('statFeatures');
+      const statReports = document.getElementById('statReports');
+      
+      try {
+        // Fetch stats and activity
+        const communityData = await fetchCommunityStats();
+        if (statMembers) statMembers.textContent = communityData.stats.active_members;
+        if (statFeatures) statFeatures.textContent = communityData.stats.total_features;
+        if (statReports) statReports.textContent = communityData.stats.active_reports;
+
+        if (activityStream) {
+          activityStream.innerHTML = '';
+          if (communityData.activity.length === 0) {
+            activityStream.innerHTML = '<div style="font-size:10px; opacity:0.5; text-align:center;">No recent activity.</div>';
+          } else {
+            communityData.activity.forEach(act => {
+              const item = document.createElement('div');
+              item.style.cssText = 'padding: 8px; background: var(--color-surface-offset); border-radius: 8px; font-size: 11px; line-height: 1.4;';
+              const time = new Date(act.created_at).toLocaleDateString();
+              const action = act.type === 'feature' ? 'added a feature' : 'commented';
+              item.innerHTML = `
+                <strong><a href="#" onclick="event.preventDefault(); window.openPublicProfileModal('${act.username}')" style="color:var(--color-primary); text-decoration:none;">${act.username || 'Anonymous'}</a></strong> 
+                ${action}: <span style="opacity:0.8;">"${act.title}"</span> 
+                <br><small style="opacity:0.5;">${time}</small>
+              `;
+              activityStream.appendChild(item);
+            });
+          }
+        }
+
+        // Fetch leaderboard
+        const profiles = await fetchPublicProfiles();
+        if (list) {
+          list.innerHTML = '';
+          if (profiles.length === 0) {
+            list.innerHTML = '<div style="text-align:center; opacity:0.5; padding:10px;">No public profiles.</div>';
+          } else {
+            profiles.forEach(p => {
+              const tile = document.createElement('div');
+              tile.className = 'tile-btn';
+              tile.style.display = 'flex';
+              tile.style.alignItems = 'center';
+              tile.style.gap = '12px';
+              tile.innerHTML = `
+                <img src="${p.avatar_url || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23ccc%22/></svg>'}" style="width:24px; height:24px; border-radius:50%; object-fit:cover;">
+                <div style="flex:1;">
+                  <div style="font-weight:700; font-size:12px;">${p.username}</div>
+                  <div style="font-size:9px; opacity:0.6;">${p.reputation_score} XP</div>
+                </div>
+              `;
+              tile.onclick = () => import('./ui.js').then(ui => ui.openPublicProfileModal(p.username));
+              list.appendChild(tile);
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Community fetch failed:", err);
+      }
+    });
+  }
   if (tabAdmin) tabAdmin.addEventListener('click', () => switchTab('admin'));
 
   if (quickReportBtn) {
@@ -426,6 +590,14 @@ async function init() {
   if (addPointBtn) addPointBtn.addEventListener('click', () => openModal(null, 'point'));
   if (addLineBtn) addLineBtn.addEventListener('click', () => openModal(null, 'line'));
   if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal);
+
+  const closeChatBtn = document.getElementById('closeChatBtn');
+  if (closeChatBtn) {
+    closeChatBtn.addEventListener('click', () => {
+      import('./chat.js').then(chat => chat.closeChat());
+    });
+  }
+
   const closeInfoCardBtn = document.getElementById('closeInfoCard');
   if (closeInfoCardBtn && infoCard) {
     closeInfoCardBtn.addEventListener('click', () => {
@@ -512,10 +684,14 @@ async function init() {
         });
       } else {
         closeModal();
+        if (infoCard) infoCard.style.display = 'none';
+        document.querySelector('.sidebar').style.display = 'none';
+        
         if (drawingControls) drawingControls.style.display = 'flex';
         stopDrawingFn = startLineDrawing(
           (points) => {},
           (finalPoints) => {
+            document.querySelector('.sidebar').style.display = 'flex';
             openModal(null, 'line', true);
             document.getElementById('f_geometry').value = JSON.stringify({ type: 'LineString', coordinates: finalPoints });
             if (drawingControls) drawingControls.style.display = 'none';
@@ -584,6 +760,72 @@ async function init() {
     editProfileBtn.addEventListener('click', () => {
       import('./ui.js').then(ui => ui.openProfileEditModal(currentUser));
     });
+  }
+
+  const enableDmsBtn = document.getElementById('enableDmsBtn');
+  if (enableDmsBtn) {
+    enableDmsBtn.addEventListener('click', async () => {
+      try {
+        enableDmsBtn.disabled = true;
+        enableDmsBtn.textContent = 'Generating Keys...';
+        
+        const cryptoModule = await import('./crypto.js');
+        const { publicJwk } = await cryptoModule.generateKeyPair();
+        
+        const apiModule = await import('./api.js');
+        await apiModule.updateProfile({ public_key: JSON.stringify(publicJwk) });
+        
+        alert('Encrypted DMs enabled successfully!');
+        enableDmsBtn.style.display = 'none';
+        
+        // Refresh local user state
+        await checkUserAuth();
+      } catch (err) {
+        alert('Failed to enable DMs: ' + err.message);
+        enableDmsBtn.disabled = false;
+        enableDmsBtn.textContent = '🔒 Enable Encrypted DMs';
+      }
+    });
+  }
+
+  const downloadBackupBtn = document.getElementById('downloadBackupBtn');
+  if (downloadBackupBtn) {
+    downloadBackupBtn.onclick = async () => {
+      const cryptoModule = await import('./crypto.js');
+      const key = await cryptoModule.exportPrivateKey();
+      if (!key) return alert('No key found to backup.');
+      
+      const blob = new Blob([key], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `jojomap-chat-key-${currentUser.username || 'user'}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    };
+  }
+
+  const importKeyFile = document.getElementById('importKeyFile');
+  if (importKeyFile) {
+    importKeyFile.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const keyString = event.target.result;
+          const cryptoModule = await import('./crypto.js');
+          cryptoModule.storePrivateKey(keyString);
+          alert('Key imported successfully! Your DMs are now accessible on this device.');
+          location.reload();
+        } catch (err) {
+          alert('Failed to import key: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    };
   }
 
   const profileEditForm = document.getElementById('profileEditForm');

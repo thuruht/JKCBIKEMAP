@@ -156,7 +156,7 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
 
   if (method === "POST" && path === "login") {
     const { email } = await request.json() as { email: string };
-    if (!email) return jsonResponse({ error: "Email required" }, 400);
+    if (!email) return jsonResponse({ error: "Email required" }, 400, request);
 
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 mins
@@ -177,7 +177,7 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
           html: `<p>Click here to login: <a href="${loginUrl}">${loginUrl}</a></p>`
         });
         console.log(`Magic Link sent to ${email} via Cloudflare Email Sending`);
-        return jsonResponse({ success: true });
+        return jsonResponse({ success: true }, 200, request);
       } else {
         throw new Error("SEND_EMAIL binding missing");
       }
@@ -185,7 +185,7 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
       console.error("Email Sending failed:", err.message);
       // Fallback log for dev visibility
       console.log(`EMERGENCY ACCESS LINK: ${loginUrl}`);
-      return jsonResponse({ error: "Failed to send email", link: loginUrl }, 500);
+      return jsonResponse({ error: "Failed to send email" }, 500, request);
     }
   }
 
@@ -338,7 +338,8 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     // 1. Resolve User and Role
     if (sessionToken) {
       const session = await env.DB.prepare(`
-        SELECT s.*, u.email, u.role, u.reputation_score, u.username, u.bio, u.avatar_url, u.social_links, u.public_key
+        SELECT s.token as session_token, s.expires_at as session_expires_at,
+               u.id as user_id, u.email, u.role, u.reputation_score, u.username, u.bio, u.avatar_url, u.social_links, u.public_key
         FROM sessions s
         JOIN users u ON s.user_id = u.id
         WHERE s.token = ? AND s.expires_at > CURRENT_TIMESTAMP
@@ -355,7 +356,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
     }
 
     // 2. Admin: MARC Import
-    if (fullPath === "/admin/import-marc") {
+    if (method === "POST" && fullPath === "/admin/import-marc") {
       if (!hasPermission(role, "feature.import_official")) {
         return new Response("Unauthorized", { status: 401 });
       }
@@ -373,7 +374,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       await env.DB.prepare("UPDATE users SET role = ? WHERE email = ?")
         .bind(newRole, email).run();
       
-      return jsonResponse({ success: true });
+      return jsonResponse({ success: true }, 200, request);
     }
 
     // 4. Moderation: Hide Feature/Comment
@@ -389,11 +390,11 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         await env.DB.prepare("DELETE FROM comments WHERE id = ?").bind(id).run(); // Assuming soft-delete via visibility isn't in comments table yet
       }
       
-      return jsonResponse({ success: true });
+      return jsonResponse({ success: true }, 200, request);
     }
 
     if (method === "GET" && path === "me") {
-      if (!user) return jsonResponse({ authenticated: false });
+      if (!user) return jsonResponse({ authenticated: false }, 200, request);
       
       const badges = await env.DB.prepare(`
         SELECT b.* FROM badges b
@@ -420,7 +421,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         },
         badges: badges.results,
         preferences
-      });
+      }, 200, request);
     }
 
     if (method === "PUT" && path === "me/profile") {
@@ -432,7 +433,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         if (username !== user.username) {
           const existing = await env.DB.prepare("SELECT id FROM users WHERE username = ?").bind(username).first();
           if (existing) {
-            return jsonResponse({ error: "Username already taken" }, 400);
+            return jsonResponse({ error: "Username already taken" }, 400, request);
           }
         }
       }
@@ -441,7 +442,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         UPDATE users SET username = ?, bio = ?, social_links = ?, public_key = COALESCE(?, public_key) WHERE id = ?
       `).bind(username || null, bio || null, social_links ? JSON.stringify(social_links) : null, public_key || null, user.user_id).run();
 
-      return jsonResponse({ success: true });
+      return jsonResponse({ success: true }, 200, request);
     }
 
     if (method === "POST" && path === "me/avatar") {
@@ -464,7 +465,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
 
       await env.DB.prepare("UPDATE users SET avatar_url = ? WHERE id = ?").bind(avatar_url, user.user_id).run();
 
-      return jsonResponse({ success: true, avatar_url });
+      return jsonResponse({ success: true, avatar_url }, 200, request);
     }
 
     if (method === "GET" && path.startsWith("avatars/")) {
@@ -524,21 +525,21 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         },
         features: features.results,
         badges: badges.results
-      });
+      }, 200, request);
     }
 
     if (method === "POST" && path === "me/preferences") {
       if (!user) return new Response("Unauthorized", { status: 401 });
       const body = await request.json();
       await env.KV.put(`prefs:${user.user_id}`, JSON.stringify(body));
-      return jsonResponse({ success: true });
+      return jsonResponse({ success: true }, 200, request);
     }
 
     if (method === "GET" && path === "me/chat-token") {
       if (!user) return new Response("Unauthorized", { status: 401 });
       // In a real app we might issue a signed JWT. Here we just return the session token 
       // since the chat worker also checks the sessions table directly!
-      return jsonResponse({ token: sessionToken });
+      return jsonResponse({ token: sessionToken }, 200, request);
     }
 
     if (method === "GET" && path === "profiles") {
@@ -548,7 +549,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         WHERE username IS NOT NULL 
         ORDER BY reputation_score DESC LIMIT 100
       `).all();
-      return jsonResponse(results);
+      return jsonResponse(results, 200, request);
     }
 
     if (method === "GET" && path === "community/stats") {
@@ -575,7 +576,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       return jsonResponse({
         activity: activity.results,
         stats
-      });
+      }, 200, request);
     }
 
     if (method === "GET" && path === "amenities") {
@@ -600,7 +601,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         return new Response(`Amenities Error: ${text.slice(0, 100)}`, { status: resp.status });
       }
       
-      return jsonResponse(await resp.json());
+      return jsonResponse(await resp.json(), 200, request);
     }
 
     if (method === "GET" && path === "features") {
@@ -639,7 +640,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
           admin_note: hasFullAccess ? f.admin_note : undefined,
           surface_note: (isSensitive && !hasFullAccess && !hasModAccess) ? null : f.surface_note
         };
-      }));
+      }), 200, request);
     }
 
     if (method === "POST" && path === "features") {
@@ -673,7 +674,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         }
       }
 
-      return jsonResponse({ success: true, id, delete_token: deleteToken });
+      return jsonResponse({ success: true, id, delete_token: deleteToken }, 200, request);
     }
 
     if (method === "PUT" && path.startsWith("features/")) {
@@ -689,6 +690,10 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
 
       if (!feature) return new Response("Not Found", { status: 404 });
       
+      // Prepare previous state for revision (parse geometry string to object)
+      const prevState = { ...feature };
+      try { if (typeof prevState.geometry === 'string') prevState.geometry = JSON.parse(prevState.geometry); } catch(e) {}
+
       const isOwner = user && feature.owner_id === user.user_id;
       const canEditAny = hasPermission(role, "feature.any.update");
       const canEditPublic = hasPermission(role, "feature.any.update_public_fields");
@@ -697,19 +702,52 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         return new Response("Unauthorized", { status: 401 });
       }
 
-      // Prepare previous state for revision (parse geometry string to object)
-      const prevState = { ...feature };
-      try { if (typeof prevState.geometry === 'string') prevState.geometry = JSON.parse(prevState.geometry); } catch(e) {}
+      // Field restrictions logic
+      let updateFields: string[] = [];
+      let params: any[] = [];
 
-      await env.DB.prepare(`
-        UPDATE features SET 
-          name = ?, category = ?, status = ?, visibility = ?, officiality = ?, 
-          public_description = ?, surface_note = ?, risk_note = ?, weather_sensitivity = ?, 
-          source_confidence = ?, longevity = ?, poster_email = ?
-        WHERE id = ?
-      `).bind(body.name || 'Unnamed', body.category || 'Local Knowledge', body.status || 'active', body.visibility || 'public', body.officiality || 'unofficial', 
-        body.public_description || null, body.surface_note || null, body.risk_note || null, body.weather_sensitivity || 'none', 
-        body.source_confidence || 'medium', body.longevity || 'permanent', body.poster_email || null, id).run();
+      const addField = (name: string, value: any) => {
+        updateFields.push(`${name} = ?`);
+        params.push(value);
+      };
+
+      if (canEditAny) {
+        // Admins can update everything
+        addField("name", body.name || feature.name);
+        addField("category", body.category || feature.category);
+        addField("status", body.status || feature.status);
+        addField("visibility", body.visibility || feature.visibility);
+        addField("officiality", body.officiality || feature.officiality);
+        addField("public_description", body.public_description || feature.public_description);
+        addField("surface_note", body.surface_note || feature.surface_note);
+        addField("risk_note", body.risk_note || feature.risk_note);
+        addField("weather_sensitivity", body.weather_sensitivity || feature.weather_sensitivity);
+        addField("source_confidence", body.source_confidence || feature.source_confidence);
+        addField("longevity", body.longevity || feature.longevity);
+        addField("poster_email", body.poster_email || feature.poster_email);
+        addField("admin_note", body.admin_note || feature.admin_note);
+      } else if (canEditPublic || isOwner) {
+        // Moderators and Owners can update public-safe fields
+        addField("name", body.name || feature.name);
+        addField("category", body.category || feature.category);
+        addField("status", body.status || feature.status);
+        addField("public_description", body.public_description || feature.public_description);
+        addField("surface_note", body.surface_note || feature.surface_note);
+        addField("risk_note", body.risk_note || feature.risk_note);
+        addField("weather_sensitivity", body.weather_sensitivity || feature.weather_sensitivity);
+        addField("longevity", body.longevity || feature.longevity);
+        
+        // Owners can also update their email
+        if (isOwner) addField("poster_email", body.poster_email || feature.poster_email);
+      }
+
+      if (updateFields.length > 0) {
+        params.push(id);
+        await env.DB.prepare(`
+          UPDATE features SET ${updateFields.join(", ")}
+          WHERE id = ?
+        `).bind(...params).run();
+      }
 
       if (body.geometry && (isOwner || canEditAny || hasPermission(role, "feature.any.update_geometry"))) {
         await env.DB.prepare("UPDATE feature_geometries SET public_geometry = ? WHERE feature_id = ?")
@@ -727,7 +765,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
         }
       }
 
-      return jsonResponse({ success: true });
+      return jsonResponse({ success: true }, 200, request);
     }
 
     if (method === "GET" && path.endsWith("/details")) {
@@ -735,7 +773,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       const sources = await env.DB.prepare("SELECT * FROM feature_sources WHERE feature_id = ?").bind(id).all();
       const reports = await env.DB.prepare("SELECT * FROM reports WHERE feature_id = ? ORDER BY created_at DESC").bind(id).all();
       const comments = await env.DB.prepare("SELECT * FROM comments WHERE feature_id = ? ORDER BY created_at DESC").bind(id).all();
-      return jsonResponse({ sources: sources.results || [], reports: reports.results || [], comments: comments.results || [] });
+      return jsonResponse({ sources: sources.results || [], reports: reports.results || [], comments: comments.results || [] }, 200, request);
     }
 
     return new Response("Not Found", { status: 404 });
@@ -745,12 +783,23 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
   }
 }
 
-function jsonResponse(data: any, status = 200): Response {
+function jsonResponse(data: any, status = 200, request?: Request): Response {
+  const allowedOrigins = [
+    "https://jojomap.kcmo.xyz",
+    "https://map.distorted.work",
+    "http://localhost:8787", // Dev
+    "http://localhost:8788"  // Dev
+  ];
+
+  const origin = request?.headers.get("Origin");
+  const corsOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+
   return new Response(JSON.stringify(data), {
     status,
     headers: { 
       "Content-Type": "application/json", 
-      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Origin": corsOrigin,
+      "Vary": "Origin"
     },
   });
 }

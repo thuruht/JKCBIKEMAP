@@ -18,6 +18,8 @@ const closeModalBtn = document.getElementById('closeModalBtn');
 const closeHelpBtn = document.getElementById('closeHelpBtn');
 const featureForm = document.getElementById('featureForm');
 const pickOnMapBtn = document.getElementById('pickOnMapBtn');
+const basemapSelect = document.getElementById('basemapSelect');
+const saveDefaultBasemapBtn = document.getElementById('saveDefaultBasemapBtn');
 
 // Admin Panel Elements
 const adminAuthRequired = document.getElementById('admin-auth-required');
@@ -45,6 +47,7 @@ const userLogoutBtn = document.getElementById('userLogoutBtn');
 let allFeatures = [];
 let currentUser = null;
 let userPermissions = [];
+let searchAbortController = null;
 
 function hasPermission(p) {
   return userPermissions.includes(p);
@@ -96,6 +99,76 @@ async function handleMarkerDrag(feature, newCoords) {
   }
 }
 
+async function checkUserAuth() {
+  try {
+    const data = await fetchMe();
+    if (data.authenticated) {
+      currentUser = data.user;
+      window.currentUser = currentUser;
+      userPermissions = data.user.permissions || [];
+      
+      if (userLoggedOutView) userLoggedOutView.style.display = 'none';
+      if (userLoggedInView) userLoggedInView.style.display = 'block';
+      if (userEmailDisplay) userEmailDisplay.textContent = data.user.email;
+      
+      const usernameDisplay = document.getElementById('userUsernameDisplay');
+      const avatarDisplay = document.getElementById('userAvatarDisplay');
+      if (usernameDisplay) {
+        usernameDisplay.textContent = data.user.username || data.user.email.split('@')[0];
+      }
+      if (avatarDisplay && data.user.avatar_url) {
+        avatarDisplay.src = data.user.avatar_url;
+        avatarDisplay.style.display = 'block';
+      }
+      
+      // Apply gamification data
+      const levelEl = document.getElementById('contributor-level');
+      const xpEl = document.getElementById('contributor-xp');
+      const barEl = document.getElementById('xp-progress-bar');
+      const badgeGrid = document.getElementById('user-badges-grid');
+
+      if (data.user.reputation_score !== undefined) {
+        const score = data.user.reputation_score;
+        const level = Math.floor(score / 50) + 1;
+        const xpInLevel = score % 50;
+        const progress = (xpInLevel / 50) * 100;
+        const levelNames = ['SCOUT', 'PATHFINDER', 'EXPLORER', 'CHART-MASTER', 'KNOWLEDGE-NODE', 'TRAIL-WIZARD', 'TERRAIN-GURU', 'MAP-VANGUARD', 'DATA-ELITE', 'LOCAL LEGEND'];
+        const levelName = levelNames[Math.min(level - 1, 9)];
+
+        if (levelEl) levelEl.textContent = `LEVEL ${level} ${levelName}`;
+        if (xpEl) xpEl.textContent = `${score} XP`;
+        if (barEl) barEl.style.width = `${progress}%`;
+
+        if (badgeGrid && data.badges) {
+          badgeGrid.innerHTML = '';
+          data.badges.forEach(b => {
+            const badge = document.createElement('div');
+            badge.style.cssText = 'padding: 2px 6px; border-radius: 4px; background: var(--color-primary-soft); color: var(--color-primary); font-size: 8px; font-weight: 700; text-transform: uppercase; border: 1px solid var(--color-primary);';
+            badge.textContent = b.name;
+            badge.title = b.description;
+            badgeGrid.appendChild(badge);
+          });
+        }
+      }
+
+      if (data.preferences) {
+        if (data.preferences.basemap) {
+          switchBasemap(data.preferences.basemap);
+          if (basemapSelect) basemapSelect.value = data.preferences.basemap;
+        }
+        if (data.preferences.theme) {
+          document.documentElement.setAttribute('data-theme', data.preferences.theme);
+          localStorage.setItem('theme', data.preferences.theme);
+        }
+      }
+      if (saveDefaultBasemapBtn) saveDefaultBasemapBtn.style.display = 'block';
+      updateAdminUI();
+    }
+  } catch (err) {
+    console.warn('Auth check failed:', err);
+  }
+};
+
 function initCryptAnimations() {
   const scanline = document.querySelector('.crypt-scan');
   const grid = document.querySelector('.crypt-grid');
@@ -119,9 +192,6 @@ function initCryptAnimations() {
 }
 
 async function init() {
-  const basemapSelect = document.getElementById('basemapSelect');
-  const saveDefaultBasemapBtn = document.getElementById('saveDefaultBasemapBtn');
-
   // Toggle Navigate Section
   const toggleNavigateBtn = document.getElementById('toggleNavigateBtn');
   const navigateContent = document.getElementById('navigateContent');
@@ -233,7 +303,12 @@ async function init() {
           }
 
           try {
-            const nomResp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&viewbox=-95.1,39.3,-94.1,38.7&bounded=1`);
+            if (searchAbortController) searchAbortController.abort();
+            searchAbortController = new AbortController();
+
+            const nomResp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&viewbox=-95.1,39.3,-94.1,38.7&bounded=1`, {
+              signal: searchAbortController.signal
+            });
             const nomData = await nomResp.json();
             
             if (nomData.length > 0) {
@@ -254,6 +329,7 @@ async function init() {
               });
             }
           } catch (err) {
+            if (err.name === 'AbortError') return;
             console.warn('Nominatim search failed:', err);
           }
         }
@@ -293,76 +369,6 @@ async function init() {
     });
   }
 
-  async function checkUserAuth() {
-    try {
-      const data = await fetchMe();
-      if (data.authenticated) {
-        currentUser = data.user;
-        window.currentUser = currentUser;
-        userPermissions = data.user.permissions || [];
-        
-        if (userLoggedOutView) userLoggedOutView.style.display = 'none';
-        if (userLoggedInView) userLoggedInView.style.display = 'block';
-        if (userEmailDisplay) userEmailDisplay.textContent = data.user.email;
-        
-        const usernameDisplay = document.getElementById('userUsernameDisplay');
-        const avatarDisplay = document.getElementById('userAvatarDisplay');
-        if (usernameDisplay) {
-          usernameDisplay.textContent = data.user.username || data.user.email.split('@')[0];
-        }
-        if (avatarDisplay && data.user.avatar_url) {
-          avatarDisplay.src = data.user.avatar_url;
-          avatarDisplay.style.display = 'block';
-        }
-        
-        // Apply gamification data
-        const levelEl = document.getElementById('contributor-level');
-        const xpEl = document.getElementById('contributor-xp');
-        const barEl = document.getElementById('xp-progress-bar');
-        const badgeGrid = document.getElementById('user-badges-grid');
-
-        if (data.user.reputation_score !== undefined) {
-          const score = data.user.reputation_score;
-          const level = Math.floor(score / 50) + 1;
-          const xpInLevel = score % 50;
-          const progress = (xpInLevel / 50) * 100;
-          const levelNames = ['SCOUT', 'PATHFINDER', 'EXPLORER', 'CHART-MASTER', 'KNOWLEDGE-NODE', 'TRAIL-WIZARD', 'TERRAIN-GURU', 'MAP-VANGUARD', 'DATA-ELITE', 'LOCAL LEGEND'];
-          const levelName = levelNames[Math.min(level - 1, 9)];
-
-          if (levelEl) levelEl.textContent = `LEVEL ${level} ${levelName}`;
-          if (xpEl) xpEl.textContent = `${score} XP`;
-          if (barEl) barEl.style.width = `${progress}%`;
-
-          if (badgeGrid && data.badges) {
-            badgeGrid.innerHTML = '';
-            data.badges.forEach(b => {
-              const badge = document.createElement('div');
-              badge.style.cssText = 'padding: 2px 6px; border-radius: 4px; background: var(--color-primary-soft); color: var(--color-primary); font-size: 8px; font-weight: 700; text-transform: uppercase; border: 1px solid var(--color-primary);';
-              badge.textContent = b.name;
-              badge.title = b.description;
-              badgeGrid.appendChild(badge);
-            });
-          }
-        }
-
-        if (data.preferences) {
-          if (data.preferences.basemap) {
-            switchBasemap(data.preferences.basemap);
-            if (basemapSelect) basemapSelect.value = data.preferences.basemap;
-          }
-          if (data.preferences.theme) {
-            document.documentElement.setAttribute('data-theme', data.preferences.theme);
-            localStorage.setItem('theme', data.preferences.theme);
-          }
-        }
-        if (saveDefaultBasemapBtn) saveDefaultBasemapBtn.style.display = 'block';
-        updateAdminUI();
-      }
-    } catch (err) {
-      console.warn('Auth check failed:', err);
-    }
-  };
-
   if (sendMagicLinkBtn) {
     sendMagicLinkBtn.addEventListener('click', async () => {
       const email = loginEmailInput.value;
@@ -370,11 +376,15 @@ async function init() {
       try {
         sendMagicLinkBtn.disabled = true;
         sendMagicLinkBtn.textContent = 'Sending...';
-        await fetch('/auth/login', {
+        const res = await fetch('/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email })
         });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Failed to send link');
+        }
         alert('Verification link sent! Check your inbox.');
       } catch (err) {
         alert('Failed to send link: ' + err.message);
@@ -452,9 +462,8 @@ async function init() {
       try {
         importMarcBtn.disabled = true;
         importMarcBtn.textContent = 'Importing...';
-        const resp = await fetch('/admin/import-marc');
-        const result = await resp.text();
-        alert(result);
+        const resp = await fetch('/admin/import-marc', { method: 'POST' });
+        const result = await resp.text();        alert(result);
         await refreshData();
       } catch (err) {
         alert('Import failed: ' + err.message);

@@ -525,32 +525,32 @@ export async function openPublicProfileModal(username) {
     const { profile, features, badges } = data;
 
     let html = `
-      <div style="display: flex; gap: var(--space-4); align-items: flex-start; margin-bottom: var(--space-4);">
-        <img src="${profile.avatar_url || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23ccc%22/></svg>'}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover;">
+      <div class="profile-card-header">
+        <img src="${profile.avatar_url || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23ccc%22/></svg>'}" class="avatar-large">
         <div style="flex: 1;">
-          <h2 style="margin: 0;">${profile.username}</h2>
-          <p style="font-size: 11px; opacity: 0.6; margin-bottom: 4px;">Reputation: ${profile.reputation_score || 0} XP</p>
-          <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-            ${(profile.social_links || []).map(l => `<a href="${l}" target="_blank" style="font-size: 10px; color: var(--color-primary); background: var(--color-primary-soft); padding: 2px 6px; border-radius: 4px; text-decoration: none;">Link</a>`).join('')}
+          <h2 class="m-0">${profile.username}</h2>
+          <p class="text-sm text-muted mb-2">Reputation: ${profile.reputation_score || 0} XP</p>
+          <div class="flex gap-1 flex-wrap">
+            ${(profile.social_links || []).map(l => `<a href="${l}" target="_blank" class="social-link">Link</a>`).join('')}
           </div>
         </div>
       </div>
       
-      ${profile.bio ? `<p style="font-size: 13px; line-height: 1.5; margin-bottom: var(--space-4);">${profile.bio}</p>` : ''}
+      ${profile.bio ? `<p class="text-base mb-4" style="line-height: 1.5;">${profile.bio}</p>` : ''}
     `;
 if (badges && badges.length > 0) {
   const badgeParam = window.location.hash.startsWith('#badge=') ? decodeURIComponent(window.location.hash.split('=')[1]) : null;
   
   html += `
-    <div style="margin-bottom: var(--space-4);">
-      <h3 style="font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Badges</h3>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap; padding: 4px;">
+    <div class="mb-4">
+      <h3 class="text-sm uppercase mb-2">Badges</h3>
+      <div class="badge-list">
         ${badges.map(b => {
           const isHighlighted = b.name === badgeParam;
           return `
-          <div style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 6px; background: ${isHighlighted ? 'var(--color-primary)' : 'var(--color-primary-soft)'}; border: 1px solid var(--color-primary); transition: all 0.3s ease; ${isHighlighted ? 'transform: scale(1.05); box-shadow: 0 0 12px var(--color-primary);' : ''}">
-            <div style="font-size: 10px; font-weight: 700; color: ${isHighlighted ? 'white' : 'var(--color-primary)'}; text-transform: uppercase;" title="${b.description}">${b.name}</div>
-            <button onclick="event.preventDefault(); window.shareBadge('${b.name}', '${profile.username}')" style="font-size: 10px; opacity: 0.7; cursor: pointer; padding: 0 4px; background: none; border: none; color: ${isHighlighted ? 'white' : 'var(--color-primary)'};">🔗</button>
+          <div class="badge-item ${isHighlighted ? 'highlighted' : ''}">
+            <div class="badge-name" title="${b.description}">${b.name}</div>
+            <button onclick="event.preventDefault(); window.shareBadge('${b.name}', '${profile.username}')" class="badge-share-btn">🔗</button>
           </div>
         `}).join('')}
       </div>
@@ -575,9 +575,9 @@ window.shareBadge = async (badgeName, username) => {
     if (features && features.length > 0) {
       html += `
         <div>
-          <h3 style="font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Recent Contributions</h3>
-          <div style="display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto;">
-            ${features.map(f => `<div style="padding: 8px; background: var(--color-bg); border-radius: 4px; font-size: 11px;"><strong>${f.name}</strong> <span style="opacity: 0.6;">(${f.category})</span></div>`).join('')}
+          <h3 class="text-sm uppercase mb-2">Recent Contributions</h3>
+          <div class="scroll-list">
+            ${features.map(f => `<div class="contribution-item"><strong>${f.name}</strong> <span class="text-muted">(${f.category})</span></div>`).join('')}
           </div>
         </div>
       `;

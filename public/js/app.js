@@ -128,9 +128,8 @@ async function init() {
   const navigateChevron = document.getElementById('navigateChevron');
   if (toggleNavigateBtn && navigateContent) {
     toggleNavigateBtn.onclick = () => {
-      const isHidden = navigateContent.style.display === 'none';
-      navigateContent.style.display = isHidden ? 'block' : 'none';
-      if (navigateChevron) navigateChevron.textContent = isHidden ? '▼' : '▶';
+      const isHidden = navigateContent.classList.toggle('hidden');
+      if (navigateChevron) navigateChevron.textContent = isHidden ? '▶' : '▼';
     };
   }
 
@@ -524,13 +523,13 @@ async function init() {
           } else {
             communityData.activity.forEach(act => {
               const item = document.createElement('div');
-              item.style.cssText = 'padding: 8px; background: var(--color-surface-offset); border-radius: 8px; font-size: 11px; line-height: 1.4;';
+              item.className = 'activity-item';
               const time = new Date(act.created_at).toLocaleDateString();
               const action = act.type === 'feature' ? 'added a feature' : 'commented';
               item.innerHTML = `
-                <strong><a href="#" onclick="event.preventDefault(); window.openPublicProfileModal('${act.username}')" style="color:var(--color-primary); text-decoration:none;">${act.username || 'Anonymous'}</a></strong> 
-                ${action}: <span style="opacity:0.8;">"${act.title}"</span> 
-                <br><small style="opacity:0.5;">${time}</small>
+                <strong><a href="#" onclick="event.preventDefault(); window.openPublicProfileModal('${act.username}')" class="text-primary no-underline">${act.username || 'Anonymous'}</a></strong> 
+                ${action}: <span class="text-muted">"${act.title}"</span> 
+                <br><small class="text-xs text-muted">${time}</small>
               `;
               activityStream.appendChild(item);
             });
@@ -546,15 +545,12 @@ async function init() {
           } else {
             profiles.forEach(p => {
               const tile = document.createElement('div');
-              tile.className = 'tile-btn';
-              tile.style.display = 'flex';
-              tile.style.alignItems = 'center';
-              tile.style.gap = '12px';
+              tile.className = 'tile-btn user-tile';
               tile.innerHTML = `
-                <img src="${p.avatar_url || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23ccc%22/></svg>'}" style="width:24px; height:24px; border-radius:50%; object-fit:cover;">
-                <div style="flex:1;">
-                  <div style="font-weight:700; font-size:12px;">${p.username}</div>
-                  <div style="font-size:9px; opacity:0.6;">${p.reputation_score} XP</div>
+                <img src="${p.avatar_url || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23ccc%22/></svg>'}" class="avatar-sm">
+                <div class="flex-1">
+                  <div class="font-bold text-sm">${p.username}</div>
+                  <div class="text-xs text-muted">${p.reputation_score} XP</div>
                 </div>
               `;
               tile.onclick = () => import('./ui.js').then(ui => ui.openPublicProfileModal(p.username));

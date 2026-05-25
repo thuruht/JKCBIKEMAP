@@ -139,19 +139,16 @@ async function renderMessage(msg, currentUser) {
   const plaintext = await decryptMessage(msg.ciphertext, msg.iv, currentSharedSecret);
   
   const isMe = msg.sender === currentUser.username;
-  const align = isMe ? 'flex-end' : 'flex-start';
-  const bg = isMe ? 'var(--color-primary)' : 'var(--color-surface-offset)';
-  const color = isMe ? 'white' : 'var(--color-text)';
   
   const div = document.createElement('div');
-  div.style.cssText = `display: flex; flex-direction: column; align-items: ${align}; margin-bottom: 8px;`;
+  div.className = \`chat-msg-container \${isMe ? 'chat-msg-me' : 'chat-msg-them'}\`;
   
-  div.innerHTML = `
-    <span style="font-size: 8px; opacity: 0.5; margin-bottom: 2px;">${msg.sender} • ${new Date(msg.timestamp).toLocaleTimeString()}</span>
-    <div style="background: ${bg}; color: ${color}; padding: 6px 10px; border-radius: 12px; font-size: 13px; max-width: 80%; word-break: break-word;">
-      ${plaintext}
+  div.innerHTML = \`
+    <span class="chat-msg-meta">\${msg.sender} • \${new Date(msg.timestamp).toLocaleTimeString()}</span>
+    <div class="chat-msg-bubble \${isMe ? 'chat-bubble-me' : 'chat-bubble-them'}">
+      \${plaintext}
     </div>
-  `;
+  \`;
   
   chatMessages.appendChild(div);
   chatMessages.scrollTop = chatMessages.scrollHeight;

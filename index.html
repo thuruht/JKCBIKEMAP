@@ -111,7 +111,7 @@
     const points = [
       {name:'Volker', category:'Neighborhoods', type:'neighborhood', coords:[39.049, -94.603], text:'West anchor near Westport and the Plaza; strong handoff into Brush Creek.'},
       {name:'Blue Hills', category:'Neighborhoods', type:'neighborhood', coords:[39.028, -94.554], text:'Mid-city ladder neighborhood between central KC and the east-side river world.'},
-      {name:'Vineyard', category:'Neighborhoods', type:'neighborhood', coords:[39.024, -94.518], text:'Useful middle connector when stitching Brush Creek toward Blue River and Swope.'},
+      {name:'Vineyard', category:'Neighborhoods', type:'neighborhood', coords:[39.048, -94.532], text:'Useful middle connector when stitching Brush Creek toward Blue River and Swope.'},
       {name:'East Blue Valley', category:'Neighborhoods', type:'neighborhood', coords:[39.090, -94.523], text:'Industrial-river corridor zone near Leeds and stadium-facing approaches.'},
       {name:'Eastwood Hills', category:'Neighborhoods', type:'neighborhood', coords:[39.071, -94.500], text:'Farther east, closer to Blue River valley and Leeds-side access.'},
       {name:'Stayton Meadows', category:'Neighborhoods', type:'neighborhood', coords:[39.060, -94.486], text:'East anchor for dropping into the Blue River and Leeds corridor.'},
@@ -156,7 +156,7 @@
       {name:'Cliff Drive', category:'Trail spines', color:'#0b7a75', weight:5, dash:null, coords:[[39.1085, -94.5635], [39.1135, -94.5565], [39.1140, -94.5410], [39.1165, -94.5125]]},
       {name:'Rock Island Trail', category:'Trail spines', color:'#0b7a75', weight:5, dash:null, coords:[[39.0512, -94.4841], [39.0081, -94.4642], [39.0011, -94.4682], [38.9482, -94.4381], [38.9079, -94.4140], [38.8881, -94.3942]]},
       {name:'Metro boundary diamond', category:'Boundary anchors', color:'#111111', weight:2, dash:'10 10', coords:[[39.203,-94.554],[39.017,-94.281],[38.886,-94.533],[38.982,-94.670],[39.203,-94.554]]},
-      {name:'Neighborhood ladder', category:'Surface / connector notes', color:'#8f8a80', weight:3, dash:'6 10', coords:[[39.110,-94.555],[39.104,-94.538],[39.090,-94.511],[39.082,-94.525],[39.060,-94.486],[39.071,-94.500],[39.024,-94.518],[39.028,-94.554],[39.049,-94.603]]},
+      {name:'Neighborhood ladder', category:'Surface / connector notes', color:'#8f8a80', weight:3, dash:'6 10', coords:[[39.110,-94.555],[39.104,-94.538],[39.090,-94.511],[39.082,-94.525],[39.071,-94.500],[39.060,-94.486],[39.048,-94.532],[39.028,-94.554],[39.049,-94.603]]},
       {name:'53rd to Minor Park idea', category:'Surface / connector notes', color:'#8f8a80', weight:3, dash:'6 10', coords:[[39.030,-94.504],[39.020,-94.511],[39.010,-94.520],[38.990,-94.526],[38.960,-94.527],[38.924,-94.527]]},
       {name:'Longview paved trail', category:'Trail spines', color:'#2f855a', weight:4, dash:null, coords:[[38.904,-94.479],[38.898,-94.482],[38.892,-94.486],[38.886,-94.490],[38.878,-94.490],[38.869,-94.488]]},
       {name:'Longview to Grandview connector', category:'Trail spines', color:'#2f855a', weight:4, dash:'4 8', coords:[[38.869,-94.488],[38.875,-94.500],[38.880,-94.515],[38.886,-94.533]]},
@@ -261,7 +261,6 @@
       const corridorItems = lines.filter(l => l.category === name);
       const details = document.createElement('details');
       details.className = 'group';
-      if (name === 'Trail spines' || name === 'Neighborhoods') details.open = true;
       const summary = document.createElement('summary');
       summary.innerHTML = `<div class="summary-left"><span class="swatch" style="background:${meta.swatch}"></span><div><div class="summary-label">${name}</div><div class="summary-copy">${meta.copy}</div></div></div><span class="chev">▾</span>`;
       details.appendChild(summary);

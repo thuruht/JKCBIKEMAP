@@ -412,11 +412,17 @@ summary::-webkit-details-marker{display:none}
 .text-primary { color: var(--color-primary); }
 .mt-2 { margin-top: var(--space-2); }
 
-.avatar-sm {
+.avatar-sm, .avatar-large {
   width: 32px;
   height: 32px;
   border-radius: 50%;
   object-fit: cover;
+  flex-shrink: 0;
+}
+
+.avatar-large {
+  width: 80px;
+  height: 80px;
 }
 
 .user-tile {
@@ -425,20 +431,61 @@ summary::-webkit-details-marker{display:none}
   gap: 12px;
 }
 
-.chat-msg-me { align-items: flex-end; }
-.chat-msg-them { align-items: flex-start; }
+/* Badges */
+.badge-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px;
+}
 
-.chat-bubble-me {
-  background: var(--color-primary);
+.badge-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--badge-color, var(--color-primary)) 15%, transparent);
+  border: 1px solid var(--badge-color, var(--color-primary));
+  transition: all 0.3s ease;
+}
+
+.badge-item.highlighted {
+  background: var(--badge-color, var(--color-primary));
+  transform: scale(1.05);
+  box-shadow: 0 0 12px var(--badge-color, var(--color-primary));
+}
+
+.badge-item.highlighted .badge-name,
+.badge-item.highlighted .badge-share-btn {
   color: white;
 }
 
-.chat-bubble-them {
-  background: var(--color-surface-offset);
-  color: var(--color-text);
+.badge-name {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--badge-color, var(--color-primary));
+  text-transform: uppercase;
 }
 
-.flex-1 { flex: 1; }
-.font-bold { font-weight: 700; }
+.badge-share-btn {
+  font-size: 10px;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 0 4px;
+  background: none;
+  border: none;
+  color: var(--badge-color, var(--color-primary));
+}
 
-.hidden { display: none !important; }
+/* Badge Color Variants */
+.badge-gold { --badge-color: #ffd700; }
+.badge-silver { --badge-color: #c0c0c0; }
+.badge-bronze { --badge-color: #cd7f32; }
+.badge-blue { --badge-color: #3b82f6; }
+.badge-red { --badge-color: #ef4444; }
+.badge-green { --badge-color: #10b981; }
+.badge-purple { --badge-color: #8b5cf6; }
+.badge-orange { --badge-color: #f59e0b; }
+.badge-pink { --badge-color: #ec4899; }
+.badge-noob { --badge-color: #a855f7; } /* Special color for n00b badge */

@@ -472,15 +472,22 @@ export function initThemeToggle() {
 // --- Profile Modal Logic ---
 import { fetchProfile } from './api.js';
 
-export function openProfileEditModal(user) {
+export async function openProfileEditModal(user) {
   const profileModal = document.getElementById('profileEditModal');
   if (!profileModal) return;
 
+  const { getAvatarHtml } = await import('./utils.js');
+  const avatarPreviewContainer = document.getElementById('editAvatarPreview').parentElement;
+  if (avatarPreviewContainer) {
+    const oldPreview = document.getElementById('editAvatarPreview');
+    if (oldPreview) oldPreview.remove();
+    avatarPreviewContainer.insertAdjacentHTML('afterbegin', getAvatarHtml(user, 'avatar-large'));
+    // We need to re-add the ID to the newly created avatar for future updates
+    avatarPreviewContainer.firstElementChild.id = 'editAvatarPreview';
+  }
+
   document.getElementById('f_profile_username').value = user.username || '';
   document.getElementById('f_profile_bio').value = user.bio || '';
-  if (user.avatar_url) {
-    document.getElementById('editAvatarPreview').src = user.avatar_url;
-  }
   
   const socialList = document.getElementById('profileSocialLinksList');
   socialList.innerHTML = '';
@@ -527,20 +534,29 @@ export async function openPublicProfileModal(username) {
   const content = document.getElementById('publicProfileContent');
   if (!publicModal || !content) return;
 
+  // Update URL for SPA routing
+  if (window.location.pathname !== `/rider/${username}`) {
+    history.pushState({ type: 'profile', username }, `Rider: ${username}`, `/rider/${username}`);
+  }
+
   content.innerHTML = '<div style="text-align: center; opacity: 0.5;">Loading profile...</div>';
   publicModal.style.display = 'flex';
   
   document.getElementById('closePublicProfileBtn').onclick = () => {
     publicModal.style.display = 'none';
+    if (window.location.pathname.startsWith('/rider/')) {
+      history.pushState({}, 'KC Mental Trail Map', '/');
+    }
   };
 
   try {
     const data = await fetchProfile(username);
     const { profile, features, badges } = data;
+    const { getAvatarHtml, getBadgeClass } = await import('./utils.js');
 
     let html = `
       <div class="profile-card-header">
-        <img src="${profile.avatar_url || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23ccc%22/></svg>'}" class="avatar-large">
+        ${getAvatarHtml(profile, 'avatar-large')}
         <div style="flex: 1;">
           <h2 class="m-0">${profile.username}</h2>
           <p class="text-sm text-muted mb-2">Reputation: ${profile.reputation_score || 0} XP</p>
@@ -562,7 +578,7 @@ if (badges && badges.length > 0) {
         ${badges.map(b => {
           const isHighlighted = b.name === badgeParam;
           return `
-          <div class="badge-item ${isHighlighted ? 'highlighted' : ''}">
+          <div class="badge-item ${getBadgeClass(b.name)} ${isHighlighted ? 'highlighted' : ''}">
             <div class="badge-name" title="${b.description}">${b.name}</div>
             <button onclick="event.preventDefault(); window.shareBadge('${b.name}', '${profile.username}')" class="badge-share-btn">🔗</button>
           </div>

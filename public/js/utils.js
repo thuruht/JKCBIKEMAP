@@ -7,12 +7,13 @@ export function getCategoryMeta(cat) {
 export function iconFor(f) {
   const meta = getCategoryMeta(f.category);
   const statusColor = f.status === 'active' ? '#ffffffff' : f.status === 'caution' ? '#f59e0bff' : '#ef4444ff';
-  const ringWidth = f.status === 'active' ? '3px' : '4px';
+  const ringWidth = f.status === 'active' ? '2px' : '4px';
+  const iconHtml = meta.icon || '📍';
   
   return L.divIcon({
     className: 'custom-marker',
-    html: `<div style="width:24px;height:24px;border-radius:999px;background:${meta.swatch};border:${ringWidth} solid ${statusColor};box-shadow:var(--shadow-md)"></div>`,
-    iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12]
+    html: `<div style="width:28px;height:28px;border-radius:999px;background:${meta.swatch};border:${ringWidth} solid ${statusColor};box-shadow:var(--shadow-md);display:grid;place-items:center;font-size:16px;">${iconHtml}</div>`,
+    iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14]
   });
 }
 export function createPopupContent(f) {
@@ -34,6 +35,34 @@ export function createPopupContent(f) {
       </div>
     </div>
   `;
+}
+
+export function getAvatarHtml(user, sizeClass = 'avatar-sm') {
+  if (user.avatar_url) {
+    return `<img src="${user.avatar_url}" class="${sizeClass}" style="object-fit: cover; border-radius: 50%;">`;
+  }
+  const name = user.username || user.email || 'Anonymous';
+  const initial = name.charAt(0).toUpperCase();
+  const colors = ['#7a9a8c', '#4f98a3', '#a0512d', '#6b5cff', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+  const color = colors[Math.abs(name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % colors.length];
+  
+  return `
+    <div class="${sizeClass}" style="background: ${color}; color: white; display: grid; place-items: center; font-weight: 700; border-radius: 50%; text-transform: uppercase; font-size: ${sizeClass === 'avatar-large' ? '32px' : '14px'};">
+      ${initial}
+    </div>
+  `;
+}
+
+export function getBadgeClass(badgeName) {
+  const name = badgeName.toLowerCase();
+  if (name.includes('n00b')) return 'badge-noob';
+  if (name.includes('legend') || name.includes('master')) return 'badge-gold';
+  if (name.includes('pioneer') || name.includes('vanguard')) return 'badge-purple';
+  if (name.includes('hunter')) return 'badge-blue';
+  if (name.includes('finder')) return 'badge-orange';
+  if (name.includes('verified')) return 'badge-green';
+  if (name.includes('alert') || name.includes('hazard')) return 'badge-red';
+  return 'badge-primary';
 }
 
 export function downloadGeoJSON(features) {

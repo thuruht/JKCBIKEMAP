@@ -64,14 +64,28 @@ export async function openChat(currentUser, targetUser) {
   const host = window.location.hostname;
   const wsUrl = `wss://chat.${host}/${currentChatId}?session=${chatToken}`;
 
-  if (ws) ws.close();
-  ws = new WebSocket(wsUrl);
+  console.log(`Connecting to chat at: ${wsUrl}`);
+
+  if (ws) {
+    console.log("Closing existing WebSocket connection...");
+    ws.close();
+  }
+  
+  try {
+    ws = new WebSocket(wsUrl);
+  } catch (e) {
+    console.error("Failed to create WebSocket instance:", e);
+    chatMessages.innerHTML += `<div style="color:red; font-size:10px; text-align:center;">Failed to initialize connection: ${e.message}</div>`;
+    return;
+  }
 
   ws.onopen = () => {
+    console.log("WebSocket connection established.");
     chatMessages.innerHTML = '<div style="text-align:center; opacity:0.5; font-size:10px; margin-bottom: 8px;">End-to-End Encrypted 🔒</div>';
   };
 
   ws.onmessage = async (event) => {
+    console.log("Received WebSocket message:", event.data);
     const data = JSON.parse(event.data);
     if (data.type === "all") {
       chatMessages.innerHTML = '<div style="text-align:center; opacity:0.5; font-size:10px; margin-bottom: 8px;">End-to-End Encrypted 🔒</div>';
@@ -84,12 +98,15 @@ export async function openChat(currentUser, targetUser) {
   };
 
   ws.onerror = (err) => {
-    console.error("WS Error:", err);
-    chatMessages.innerHTML += '<div style="color:red; font-size:10px; text-align:center;">Connection error.</div>';
+    console.error("WebSocket Error:", err);
+    chatMessages.innerHTML += '<div style="color:red; font-size:10px; text-align:center;">Connection error. Check console for details.</div>';
   };
 
-  ws.onclose = () => {
-    // chatMessages.innerHTML += '<div style="color:gray; font-size:10px; text-align:center;">Disconnected.</div>';
+  ws.onclose = (event) => {
+    console.log(`WebSocket closed: Code ${event.code}, Reason: ${event.reason || 'none'}`);
+    if (event.code === 1008) {
+      chatMessages.innerHTML += '<div style="color:red; font-size:10px; text-align:center;">Authentication failed (1008).</div>';
+    }
   };
 
   const sendBtn = document.getElementById('chatSendBtn');

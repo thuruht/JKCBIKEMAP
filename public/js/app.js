@@ -3,46 +3,11 @@ import { initLeafletMap, renderMap, flyToFeature, enableMapPicker, toggleLayer, 
 import { updateInfoCard, renderLegend, initThemeToggle, openModal, closeModal, openHelpModal, closeHelpModal, switchTab } from './ui.js';
 import { downloadGeoJSON, getCategoryMeta } from './utils.js';
 
-// DOM Elements
-const infoCard = document.getElementById('infoCard');
-const legendStack = document.getElementById('legendStack');
-const searchInput = document.getElementById('searchInput');
-const helpBtn = document.getElementById('helpBtn');
-const quickReportBtn = document.getElementById('quickReportBtn');
-const adminActions = document.getElementById('adminActions');
-const exportGeoJsonBtn = document.getElementById('exportGeoJsonBtn');
-const importMarcBtn = document.getElementById('importMarcBtn');
-const addPointBtn = document.getElementById('addPointBtn');
-const addLineBtn = document.getElementById('addLineBtn');
-const closeModalBtn = document.getElementById('closeModalBtn');
-const closeHelpBtn = document.getElementById('closeHelpBtn');
-const featureForm = document.getElementById('featureForm');
-const pickOnMapBtn = document.getElementById('pickOnMapBtn');
-const basemapSelect = document.getElementById('basemapSelect');
-const saveDefaultBasemapBtn = document.getElementById('saveDefaultBasemapBtn');
-
-// Admin Panel Elements
-const adminAuthRequired = document.getElementById('admin-auth-required');
-const roleManagementSection = document.getElementById('roleManagementSection');
-const targetUserEmail = document.getElementById('targetUserEmail');
-const targetUserRole = document.getElementById('targetUserRole');
-const assignRoleBtn = document.getElementById('assignRoleBtn');
-const featureActions = document.getElementById('featureActions');
-
-// Tabs
-const tabExplore = document.getElementById('tab-explore');
-const tabSearch = document.getElementById('tab-search');
-const tabCommunity = document.getElementById('tab-community');
-const tabMessages = document.getElementById('tab-messages');
-const tabAdmin = document.getElementById('tab-admin');
-
-// User Auth Elements
-const sendMagicLinkBtn = document.getElementById('sendMagicLinkBtn');
-const loginEmailInput = document.getElementById('loginEmailInput');
-const userLoggedOutView = document.getElementById('user-logged-out');
-const userLoggedInView = document.getElementById('user-logged-in');
-const userEmailDisplay = document.getElementById('userEmailDisplay');
-const userLogoutBtn = document.getElementById('userLogoutBtn');
+// DOM Elements (Global references assigned in init)
+let infoCard, legendStack, searchInput, helpBtn, quickReportBtn, adminActions, exportGeoJsonBtn, importMarcBtn, addPointBtn, addLineBtn, featureForm, basemapSelect, saveDefaultBasemapBtn;
+let adminAuthRequired, moderationQueueSection, moderationQueueList, roleManagementSection, targetUserEmail, targetUserRole, assignRoleBtn, featureActions;
+let tabExplore, tabSearch, tabCommunity, tabMessages, tabAdmin;
+let sendMagicLinkBtn, loginEmailInput, userLoggedOutView, userLoggedInView, userEmailDisplay, userLogoutBtn;
 
 let allFeatures = [];
 let currentUser = null;
@@ -70,6 +35,12 @@ function updateAdminUI() {
     // Feature Actions (Moderators + Admins)
     if (featureActions) featureActions.style.display = (isStaff || isAdmin) ? 'block' : 'none';
 
+    // Moderation Queue (Moderators + Admins)
+    if (moderationQueueSection) {
+      moderationQueueSection.style.display = hasPermission('report.read') ? 'block' : 'none';
+      if (hasPermission('report.read')) refreshModerationQueue();
+    }
+
     // Admin only tools
     if (importMarcBtn) importMarcBtn.style.display = hasPermission('feature.import_official') ? 'block' : 'none';
     if (roleManagementSection) roleManagementSection.style.display = isAdmin ? 'block' : 'none';
@@ -81,6 +52,56 @@ function updateAdminUI() {
   if (allFeatures.length) {
     renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, userPermissions), handleMarkerDrag, isStaff || isAdmin);
     renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, userPermissions)));
+  }
+}
+
+async function refreshModerationQueue() {
+  if (!moderationQueueList) return;
+  try {
+    const { fetchReports, resolveReport } = await import('./api.js');
+    const reports = await fetchReports();
+    
+    if (reports.length === 0) {
+      moderationQueueList.innerHTML = '<p style="font-size: 11px; opacity: 0.6;">No active reports. Map is clear!</p>';
+      return;
+    }
+
+    moderationQueueList.innerHTML = reports.map(r => `
+      <div class="note" style="display: flex; flex-direction: column; gap: 4px; border-left: 3px solid var(--color-primary);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <strong>${r.report_type}</strong>
+          <small>${new Date(r.created_at).toLocaleDateString()}</small>
+        </div>
+        <div style="font-size: 11px;">Feature: <strong>${r.feature_name}</strong></div>
+        <div style="font-size: 11px; opacity: 0.8;">${r.description || 'No description provided.'}</div>
+        <div style="display: flex; gap: 4px; margin-top: 4px;">
+          <button class="jump-btn resolve-btn" data-id="${r.id}" style="padding: 2px 8px; font-size: 10px; background: var(--color-primary); color: white;">Resolve</button>
+          <button class="jump-btn view-btn" data-feature-id="${r.feature_id}" style="padding: 2px 8px; font-size: 10px;">View</button>
+        </div>
+      </div>
+    `).join('');
+
+    moderationQueueList.querySelectorAll('.resolve-btn').forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm('Mark this report as resolved?')) return;
+        btn.disabled = true;
+        await resolveReport(btn.dataset.id);
+        refreshModerationQueue();
+      };
+    });
+
+    moderationQueueList.querySelectorAll('.view-btn').forEach(btn => {
+      btn.onclick = () => {
+        const feat = allFeatures.find(f => f.id === btn.dataset.featureId);
+        if (feat) {
+          flyToFeature(feat, (f) => updateInfoCard(f, infoCard, userPermissions));
+          // Switch to Explore tab
+          switchTab('explore');
+        }
+      };
+    });
+  } catch (err) {
+    moderationQueueList.innerHTML = `<p style="font-size: 11px; color: red;">Error: ${err.message}</p>`;
   }
 }
 
@@ -117,13 +138,16 @@ async function checkUserAuth() {
       if (userEmailDisplay) userEmailDisplay.textContent = data.user.email;
       
       const usernameDisplay = document.getElementById('userUsernameDisplay');
-      const avatarDisplay = document.getElementById('userAvatarDisplay');
+      const avatarContainer = document.getElementById('userAvatarDisplay')?.parentElement;
       if (usernameDisplay) {
         usernameDisplay.textContent = data.user.username || data.user.email.split('@')[0];
       }
-      if (avatarDisplay && data.user.avatar_url) {
-        avatarDisplay.src = data.user.avatar_url;
-        avatarDisplay.style.display = 'block';
+      if (avatarContainer) {
+        const oldAvatar = document.getElementById('userAvatarDisplay');
+        if (oldAvatar) oldAvatar.remove(); // Remove static img
+        const { getAvatarHtml } = await import('./utils.js');
+        const avatarHtml = getAvatarHtml(data.user, 'avatar-sm');
+        avatarContainer.insertAdjacentHTML('afterbegin', avatarHtml);
       }
       
       // Apply gamification data
@@ -146,9 +170,11 @@ async function checkUserAuth() {
 
         if (badgeGrid && data.badges) {
           badgeGrid.innerHTML = '';
+          const { getBadgeClass } = await import('./utils.js');
           data.badges.forEach(b => {
             const badge = document.createElement('div');
-            badge.style.cssText = 'padding: 2px 6px; border-radius: 4px; background: var(--color-primary-soft); color: var(--color-primary); font-size: 8px; font-weight: 700; text-transform: uppercase; border: 1px solid var(--color-primary);';
+            badge.className = `badge-item ${getBadgeClass(b.name)}`;
+            badge.style.cssText = 'padding: 2px 6px; border-radius: 4px; font-size: 8px; font-weight: 700; text-transform: uppercase;';
             badge.textContent = b.name;
             badge.title = b.description;
             badgeGrid.appendChild(badge);
@@ -172,7 +198,7 @@ async function checkUserAuth() {
   } catch (err) {
     console.warn('Auth check failed:', err);
   }
-};
+}
 
 function initCryptAnimations() {
   const scanline = document.querySelector('.crypt-scan');
@@ -197,6 +223,54 @@ function initCryptAnimations() {
 }
 
 async function init() {
+  // Initialize DOM References
+  infoCard = document.getElementById('infoCard');
+  legendStack = document.getElementById('legendStack');
+  searchInput = document.getElementById('searchInput');
+  helpBtn = document.getElementById('helpBtn');
+  quickReportBtn = document.getElementById('quickReportBtn');
+  adminActions = document.getElementById('adminActions');
+  exportGeoJsonBtn = document.getElementById('exportGeoJsonBtn');
+  importMarcBtn = document.getElementById('importMarcBtn');
+  addPointBtn = document.getElementById('addPointBtn');
+  addLineBtn = document.getElementById('addLineBtn');
+  featureForm = document.getElementById('featureForm');
+  basemapSelect = document.getElementById('basemapSelect');
+  saveDefaultBasemapBtn = document.getElementById('saveDefaultBasemapBtn');
+
+  adminAuthRequired = document.getElementById('admin-auth-required');
+  moderationQueueSection = document.getElementById('moderationQueueSection');
+  moderationQueueList = document.getElementById('moderationQueueList');
+  roleManagementSection = document.getElementById('roleManagementSection');
+  targetUserEmail = document.getElementById('targetUserEmail');
+  targetUserRole = document.getElementById('targetUserRole');
+  assignRoleBtn = document.getElementById('assignRoleBtn');
+  featureActions = document.getElementById('featureActions');
+
+  tabExplore = document.getElementById('tab-explore');
+  tabSearch = document.getElementById('tab-search');
+  tabCommunity = document.getElementById('tab-community');
+  tabMessages = document.getElementById('tab-messages');
+  tabAdmin = document.getElementById('tab-admin');
+
+  sendMagicLinkBtn = document.getElementById('sendMagicLinkBtn');
+  loginEmailInput = document.getElementById('loginEmailInput');
+  userLoggedOutView = document.getElementById('user-logged-out');
+  userLoggedInView = document.getElementById('user-logged-in');
+  userEmailDisplay = document.getElementById('userEmailDisplay');
+  userLogoutBtn = document.getElementById('userLogoutBtn');
+
+  // Toggle Layers Section
+  const toggleLayersBtn = document.getElementById('toggleLayersBtn');
+  const layersContent = document.getElementById('layersContent');
+  const layersChevron = document.getElementById('layersChevron');
+  if (toggleLayersBtn && layersContent) {
+    toggleLayersBtn.onclick = () => {
+      const isHidden = layersContent.classList.toggle('hidden');
+      if (layersChevron) layersChevron.textContent = isHidden ? '▶' : '▼';
+    };
+  }
+
   // Toggle Navigate Section
   const toggleNavigateBtn = document.getElementById('toggleNavigateBtn');
   const navigateContent = document.getElementById('navigateContent');
@@ -223,7 +297,21 @@ async function init() {
   await refreshData();
   initCryptAnimations();
 
-  // Handle vanity URLs (/rider/username)
+  // Handle popstate for SPA routing
+  window.addEventListener('popstate', (e) => {
+    if (window.location.pathname.startsWith('/rider/')) {
+      const parts = window.location.pathname.split('/');
+      const username = parts[2];
+      if (username) {
+        import('./ui.js').then(ui => ui.openPublicProfileModal(username));
+      }
+    } else {
+      const profileModal = document.getElementById('publicProfileModal');
+      if (profileModal) profileModal.style.display = 'none';
+    }
+  });
+
+  // Handle initial vanity URLs (/rider/username)
   if (window.location.pathname.startsWith('/rider/')) {
     const parts = window.location.pathname.split('/');
     const username = parts[2];
@@ -258,16 +346,17 @@ async function init() {
         if (searchResultsList) {
           searchResultsList.innerHTML = '';
           
-          // --- New: Search for Users ---
+          // Add Profile Results
           try {
             const profiles = await fetchPublicProfiles();
-            const matchedUsers = profiles.filter(p => p.username && p.username.toLowerCase().includes(q));
+            const matchedUsers = profiles.filter(u => u.username.toLowerCase().includes(q));
             if (matchedUsers.length > 0) {
               const uDivider = document.createElement('div');
-              uDivider.style.cssText = 'font-size:9px; text-transform:uppercase; font-weight:700; margin: 0 0 4px; opacity:0.5;';
-              uDivider.textContent = 'Community Members';
+              uDivider.style.cssText = 'font-size:9px; text-transform:uppercase; font-weight:700; margin: 8px 0 4px; opacity:0.5;';
+              uDivider.textContent = 'Riders';
               searchResultsList.appendChild(uDivider);
 
+              const { getAvatarHtml } = await import('./utils.js');
               matchedUsers.forEach(u => {
                 const tile = document.createElement('div');
                 tile.className = 'tile-btn';
@@ -276,19 +365,15 @@ async function init() {
                 tile.style.gap = '8px';
                 tile.style.borderLeft = '4px solid var(--color-primary)';
                 tile.innerHTML = `
-                  <img src="${u.avatar_url || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23ccc%22/></svg>'}" style="width:20px; height:20px; border-radius:50%; object-fit:cover;">
+                  ${getAvatarHtml(u, 'avatar-sm')}
                   <div><strong>${u.username}</strong></div>
                 `;
                 tile.onclick = () => import('./ui.js').then(ui => ui.openPublicProfileModal(u.username));
                 searchResultsList.appendChild(tile);
               });
-              
-              const spacer = document.createElement('div');
-              spacer.style.height = '12px';
-              searchResultsList.appendChild(spacer);
             }
-          } catch (e) {
-            console.warn("User search failed:", e);
+          } catch (err) {
+            console.warn('Profile search failed:', err);
           }
 
           if (filtered.length > 0) {
@@ -421,38 +506,30 @@ async function init() {
           if (!geojson.features || !Array.isArray(geojson.features)) throw new Error("Invalid GeoJSON.");
           importGeoJsonBtn.disabled = true;
           importGeoJsonBtn.textContent = 'Importing...';
-          
+
           const featuresToImport = geojson.features.map(feat => {
             const geom = feat.geometry;
             const props = feat.properties || {};
             if (!geom) return null;
-            
             return {
               name: props.name || 'Imported Feature',
-              feature_type: geom.type === 'Point' ? 'point' : 'line',
-              category: props.category || 'Trail spines',
+              geometry: geom,
+              feature_type: props.feature_type || (geom.type === 'Point' ? 'point' : 'line'),
+              category: props.category || 'Local Knowledge',
               status: props.status || 'active',
-              officiality: props.officiality || 'official',
               visibility: props.visibility || 'public',
-              public_description: props.public_description || '',
-              geometry: geom
+              officiality: props.officiality || 'unofficial'
             };
           }).filter(Boolean);
 
-          try {
-            const { createFeaturesBulk } = await import('./api.js');
-            const result = await createFeaturesBulk(featuresToImport);
-            alert(`Imported ${result.count} features.`);
-            await refreshData();
-          } catch (err) {
-            alert("Bulk import failed: " + err.message);
-          }
+          const { bulkImportFeatures } = await import('./api.js');
+          const res = await bulkImportFeatures(featuresToImport);
+          alert(`Successfully imported ${res.count} features.`);
+          location.reload();
         } catch (err) {
-          alert("Error: " + err.message);
-        } finally {
+          alert('Import failed: ' + err.message);
           importGeoJsonBtn.disabled = false;
-          importGeoJsonBtn.textContent = 'Import GeoJSON';
-          geoJsonFileInput.value = '';
+          importGeoJsonBtn.textContent = 'Bulk Import GeoJSON';
         }
       };
       reader.readAsText(file);
@@ -461,100 +538,59 @@ async function init() {
 
   if (importMarcBtn) {
     importMarcBtn.addEventListener('click', async () => {
-      if (!confirm('Fetch and import latest MARC data?')) return;
+      if (!confirm('This will fetch and import the latest MARC regional trail data. Proceed?')) return;
       try {
         importMarcBtn.disabled = true;
         importMarcBtn.textContent = 'Importing...';
-        const resp = await fetch('/admin/import-marc', { method: 'POST' });
-        const result = await resp.text();        alert(result);
-        await refreshData();
+        const res = await fetch('/admin/import-marc', { method: 'POST' });
+        if (!res.ok) throw new Error(await res.text());
+        const msg = await res.text();
+        alert(msg);
+        location.reload();
       } catch (err) {
-        alert('Import failed: ' + err.message);
-      } finally {
+        alert('Failed: ' + err.message);
         importMarcBtn.disabled = false;
-        importMarcBtn.textContent = 'Run MARC Import';
+        importMarcBtn.textContent = 'Import MARC Trails';
       }
     });
   }
 
-  if (tabExplore) tabExplore.addEventListener('click', () => switchTab('explore'));
-  if (tabSearch) tabSearch.addEventListener('click', () => switchTab('search'));
-  if (tabMessages) {
-    tabMessages.addEventListener('click', () => {
-      switchTab('messages');
-      const list = document.getElementById('messagesList');
-      if (!list) return;
+  if (addPointBtn) addPointBtn.onclick = () => openModal(null, 'point');
+  if (addLineBtn) addLineBtn.onclick = () => startLineDrawing();
 
-      if (!window.currentUser) {
-        list.innerHTML = '<div style="text-align:center; opacity:0.5; padding:20px;">Please login on the Explore tab to access encrypted messages.</div>';
-        return;
-      }
-
-      const recent = JSON.parse(localStorage.getItem('recent_chats') || '[]');
-      if (recent.length === 0) {
-        list.innerHTML = '<div style="text-align:center; opacity:0.5; padding:20px;">No recent conversations. Find a rider in the Community tab to start a chat!</div>';
-      } else {
-        list.innerHTML = '';
-        recent.forEach(u => {
-          const tile = document.createElement('div');
-          tile.className = 'tile-btn';
-          tile.style.display = 'flex';
-          tile.style.alignItems = 'center';
-          tile.style.gap = '12px';
-          tile.innerHTML = `
-            <img src="${u.avatar_url || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23ccc%22/></svg>'}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
-            <div style="flex:1;">
-              <div style="font-weight:700;">${u.username}</div>
-              <div style="font-size:9px; opacity:0.6;">Encrypted Tunnel Active 🔒</div>
-            </div>
-          `;
-          tile.onclick = async () => {
-            const chatModule = await import('./chat.js');
-            chatModule.openChat(currentUser, u);
-          };
-          list.appendChild(tile);
-        });
-      }
-    });
-  }
+  if (tabExplore) tabExplore.onclick = () => switchTab('explore');
+  if (tabSearch) tabSearch.onclick = () => switchTab('search');
   if (tabCommunity) {
-    tabCommunity.addEventListener('click', async () => {
+    tabCommunity.onclick = async () => {
       switchTab('community');
-      const list = document.getElementById('communityList');
-      const activityStream = document.getElementById('activityStream');
-      const statMembers = document.getElementById('statMembers');
-      const statFeatures = document.getElementById('statFeatures');
-      const statReports = document.getElementById('statReports');
+      const statsEl = document.getElementById('community-stats');
+      const list = document.getElementById('community-profiles-list');
+      const activityList = document.getElementById('community-activity-list');
       
       try {
-        // Fetch stats and activity
-        const communityData = await fetchCommunityStats();
-        if (statMembers) statMembers.textContent = communityData.stats.active_members;
-        if (statFeatures) statFeatures.textContent = communityData.stats.total_features;
-        if (statReports) statReports.textContent = communityData.stats.active_reports;
-
-        if (activityStream) {
-          activityStream.innerHTML = '';
-          if (communityData.activity.length === 0) {
-            activityStream.innerHTML = '<div style="font-size:10px; opacity:0.5; text-align:center;">No recent activity.</div>';
-          } else {
-            communityData.activity.forEach(act => {
-              const item = document.createElement('div');
-              item.className = 'activity-item';
-              const time = new Date(act.created_at).toLocaleDateString();
-              const action = act.type === 'feature' ? 'added a feature' : 'commented';
-              item.innerHTML = `
-                <strong><a href="#" onclick="event.preventDefault(); window.openPublicProfileModal('${act.username}')" class="text-primary no-underline">${act.username || 'Anonymous'}</a></strong> 
-                ${action}: <span class="text-muted">"${act.title}"</span> 
-                <br><small class="text-xs text-muted">${time}</small>
-              `;
-              activityStream.appendChild(item);
-            });
-          }
+        const { activity, stats } = await fetchCommunityStats();
+        if (statsEl) {
+          statsEl.innerHTML = `
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align:center;">
+              <div class="activity-item"><strong>${stats.total_features}</strong><br><small>Features</small></div>
+              <div class="activity-item"><strong>${stats.active_reports}</strong><br><small>Alerts</small></div>
+              <div class="activity-item"><strong>${stats.active_members}</strong><br><small>Riders</small></div>
+            </div>
+          `;
+        }
+        
+        if (activityList) {
+          activityList.innerHTML = activity.map(a => `
+            <div class="activity-item" style="margin-bottom: 4px; font-size: 10px;">
+              <strong>${a.username || 'Anonymous'}</strong> ${a.type === 'feature' ? 'mapped' : 'commented on'} <strong>${a.title}</strong>
+              <div style="opacity: 0.5;">${new Date(a.created_at).toLocaleDateString()}</div>
+            </div>
+          `).join('');
         }
 
         // Fetch leaderboard
         const profiles = await fetchPublicProfiles();
+        const { getAvatarHtml } = await import('./utils.js');
         if (list) {
           list.innerHTML = '';
           if (profiles.length === 0) {
@@ -564,7 +600,7 @@ async function init() {
               const tile = document.createElement('div');
               tile.className = 'tile-btn user-tile';
               tile.innerHTML = `
-                <img src="${p.avatar_url || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23ccc%22/></svg>'}" class="avatar-sm">
+                ${getAvatarHtml(p, 'avatar-sm')}
                 <div class="flex-1">
                   <div class="font-bold text-sm">${p.username}</div>
                   <div class="text-xs text-muted">${p.reputation_score} XP</div>
@@ -576,63 +612,48 @@ async function init() {
           }
         }
       } catch (err) {
-        console.error("Community fetch failed:", err);
+        console.warn('Failed to load community data:', err);
       }
-    });
+    };
   }
-  if (tabAdmin) tabAdmin.addEventListener('click', () => switchTab('admin'));
+  if (tabMessages) {
+    tabMessages.onclick = () => {
+      switchTab('messages');
+      renderRecentChats();
+    };
+  }
+  if (tabAdmin) tabAdmin.onclick = () => switchTab('admin');
 
+  if (helpBtn) helpBtn.onclick = openHelpModal;
+
+  const quickReportModal = document.getElementById('reportModal');
   if (quickReportBtn) {
-    quickReportBtn.addEventListener('click', () => {
-      alert('Click on the map to report an issue.');
-      enableMapPicker((coords) => {
-        openModal({
-          name: 'New Report',
-          category: 'Field Reports',
-          status: 'caution',
-          public_geometry: { type: 'Point', coordinates: coords },
-          geometry: { type: 'Point', coordinates: coords }
-        });
-      });
-    });
+    quickReportBtn.onclick = () => {
+      if (!currentUser) return alert('Login required to submit field reports.');
+      quickReportModal.style.display = 'flex';
+    };
   }
 
-  if (helpBtn) helpBtn.addEventListener('click', openHelpModal);
-  if (closeHelpBtn) closeHelpBtn.addEventListener('click', closeHelpModal);
-
-  if (addPointBtn) addPointBtn.addEventListener('click', () => openModal(null, 'point'));
-  if (addLineBtn) addLineBtn.addEventListener('click', () => openModal(null, 'line'));
-  if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal);
-
-  const closeChatBtn = document.getElementById('closeChatBtn');
-  if (closeChatBtn) {
-    closeChatBtn.addEventListener('click', () => {
-      import('./chat.js').then(chat => chat.closeChat());
-    });
+  const reportForm = document.getElementById('reportForm');
+  if (reportForm) {
+    reportForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const body = {
+        feature_id: document.getElementById('r_feature_id').value || null,
+        report_type: document.getElementById('r_type').value,
+        description: document.getElementById('r_description').value
+      };
+      try {
+        const { createReport } = await import('./api.js');
+        await createReport(body);
+        alert('Report submitted! Thank you.');
+        quickReportModal.style.display = 'none';
+        reportForm.reset();
+      } catch (err) {
+        alert('Failed: ' + err.message);
+      }
+    };
   }
-
-  const closeInfoCardBtn = document.getElementById('closeInfoCard');
-  if (closeInfoCardBtn && infoCard) {
-    closeInfoCardBtn.addEventListener('click', () => {
-      infoCard.style.display = 'none';
-    });
-  }
-
-  // Layer Toggles
-  const knowledgeToggle = document.getElementById('layer-knowledge');
-  const officialToggle = document.getElementById('layer-official');
-  const reportsToggle = document.getElementById('layer-reports');
-  const amenitiesToggle = document.getElementById('layer-amenities');
-
-  if (knowledgeToggle) knowledgeToggle.addEventListener('change', (e) => toggleLayer('knowledge', e.target.checked));
-  if (officialToggle) officialToggle.addEventListener('change', (e) => toggleLayer('official', e.target.checked));
-  if (reportsToggle) reportsToggle.addEventListener('change', (e) => toggleLayer('reports', e.target.checked));
-
-  // Overlay Toggles
-  ['railway', 'cycling_routes', 'hiking_trails'].forEach(id => {
-    const el = document.getElementById(`overlay-${id}`);
-    if (el) el.addEventListener('change', (e) => toggleOverlay(id, e.target.checked));
-  });
 
   if (basemapSelect) {
     basemapSelect.addEventListener('change', (e) => {
@@ -643,136 +664,93 @@ async function init() {
   if (saveDefaultBasemapBtn) {
     saveDefaultBasemapBtn.addEventListener('click', async () => {
       const basemapId = basemapSelect ? basemapSelect.value : 'pioneer';
-      const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
       try {
         saveDefaultBasemapBtn.disabled = true;
         saveDefaultBasemapBtn.textContent = 'SAVING...';
         await fetch('/api/me/preferences', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ basemap: basemapId, theme: currentTheme })
+          body: JSON.stringify({ basemap: basemapId })
         });
-        saveDefaultBasemapBtn.textContent = 'SAVED!';
-        setTimeout(() => {
-          saveDefaultBasemapBtn.textContent = 'SET DEFAULT';
-          saveDefaultBasemapBtn.disabled = false;
-        }, 2000);
+        alert('Default basemap saved!');
       } catch (err) {
-        saveDefaultBasemapBtn.textContent = 'ERROR';
-        setTimeout(() => {
-          saveDefaultBasemapBtn.textContent = 'SET DEFAULT';
-          saveDefaultBasemapBtn.disabled = false;
-        }, 2000);
+        alert('Failed to save preference.');
+      } finally {
+        saveDefaultBasemapBtn.disabled = false;
+        saveDefaultBasemapBtn.textContent = 'SET DEFAULT';
       }
     });
   }
 
-  if (amenitiesToggle) {
-    amenitiesToggle.addEventListener('change', (e) => {
-      toggleLayer('amenities', e.target.checked);
-      if (e.target.checked) fetchAmenities();
-    });
-  }
+  // Layer Toggles
+  const toggles = [
+    { id: 'layer-knowledge', type: 'layer', name: 'knowledge' },
+    { id: 'layer-official', type: 'layer', name: 'official' },
+    { id: 'layer-reports', type: 'layer', name: 'reports' },
+    { id: 'layer-amenities', type: 'layer', name: 'amenities' },
+    { id: 'overlay-railway', type: 'overlay', name: 'railway' },
+    { id: 'overlay-cycling_routes', type: 'overlay', name: 'cycling_routes' },
+    { id: 'overlay-hiking_trails', type: 'overlay', name: 'hiking_trails' }
+  ];
 
-  if (map) {
-    map.on('moveend', () => {
-      if (amenitiesToggle && amenitiesToggle.checked) fetchAmenities();
-    });
-  }
-
-  if (pickOnMapBtn) {
-    const drawingControls = document.getElementById('drawing-controls');
-    const finishDrawingBtn = document.getElementById('finishDrawingBtn');
-    let stopDrawingFn = null;
-
-    pickOnMapBtn.addEventListener('click', () => {
-      const type = document.getElementById('f_type').value;
-      const geomField = document.getElementById('f_geometry');
-      if (type === 'point') {
-        const originalText = pickOnMapBtn.textContent;
-        pickOnMapBtn.textContent = 'Click on Map...';
-        enableMapPicker((coords) => {
-          geomField.value = JSON.stringify({ type: 'Point', coordinates: coords });
-          pickOnMapBtn.textContent = originalText;
-        });
-      } else {
-        closeModal();
-        if (infoCard) infoCard.style.display = 'none';
-        document.querySelector('.sidebar').style.display = 'none';
-        
-        if (drawingControls) drawingControls.style.display = 'flex';
-        stopDrawingFn = startLineDrawing(
-          (points) => {},
-          (finalPoints) => {
-            document.querySelector('.sidebar').style.display = 'flex';
-            openModal(null, 'line', true);
-            document.getElementById('f_geometry').value = JSON.stringify({ type: 'LineString', coordinates: finalPoints });
-            if (drawingControls) drawingControls.style.display = 'none';
-          }
-        );
-      }
-    });
-
-    if (finishDrawingBtn) {
-      finishDrawingBtn.addEventListener('click', () => {
-        if (stopDrawingFn) {
-          stopDrawingFn();
-          stopDrawingFn = null;
-        }
-      });
+  toggles.forEach(t => {
+    const el = document.getElementById(t.id);
+    if (el) {
+      el.onchange = (e) => {
+        if (t.type === 'layer') toggleLayer(t.name, e.target.checked);
+        else toggleOverlay(t.name, e.target.checked);
+      };
     }
-  }
+  });
 
-  if (featureForm) {
-    featureForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const id = document.getElementById('f_id').value;
-      try {
-        const geomValue = document.getElementById('f_geometry').value;
-        if (!geomValue) throw new Error('Pick a location first.');
-
-        const data = {
-          name: document.getElementById('f_name').value,
-          feature_type: document.getElementById('f_type').value,
-          category: document.getElementById('f_category').value,
-          status: document.getElementById('f_status').value,
-          officiality: document.getElementById('f_officiality').value,
-          visibility: document.getElementById('f_visibility').value,
-          public_description: document.getElementById('f_description').value,
-          surface_note: document.getElementById('f_surface_note').value,
-          risk_note: document.getElementById('f_risk_note').value,
-          weather_sensitivity: document.getElementById('f_weather').value,
-          source_confidence: document.getElementById('f_confidence').value,
-          longevity: document.getElementById('f_longevity').value,
-          poster_email: document.getElementById('f_poster_email').value,
-          geometry: JSON.parse(geomValue),
-          sources: Array.from(document.querySelectorAll('.source-link-row')).map(row => ({
-            url: row.querySelector('.source-url').value,
-            note: row.querySelector('.source-note').value
-          })).filter(s => s.url)
-        };
-
-        if (id) {
-          await updateFeature(id, data);
-        } else {
-          const result = await createFeature(data);
-          if (result.success && data.poster_email && !currentUser) {
-            alert(`Success! Delete token: ${result.delete_token}`);
-          }
-        }
-        closeModal();
-        await refreshData();
-      } catch (err) {
-        alert('Error: ' + err.message);
-      }
-    });
-  }
-
+  // Profile Edit
   const editProfileBtn = document.getElementById('editProfileBtn');
   if (editProfileBtn) {
-    editProfileBtn.addEventListener('click', () => {
-      import('./ui.js').then(ui => ui.openProfileEditModal(currentUser));
-    });
+    editProfileBtn.onclick = async () => {
+      const { openProfileEditModal } = await import('./ui.js');
+      openProfileEditModal(currentUser);
+    };
+  }
+
+  const profileForm = document.getElementById('profileEditForm');
+  if (profileForm) {
+    profileForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const saveBtn = profileForm.querySelector('button[type="submit"]');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+
+      const socialLinks = Array.from(document.querySelectorAll('.social-url')).map(input => input.value).filter(Boolean);
+      
+      const body = {
+        username: document.getElementById('f_profile_username').value,
+        bio: document.getElementById('f_profile_bio').value,
+        social_links: socialLinks
+      };
+
+      try {
+        const { updateProfile } = await import('./api.js');
+        await updateProfile(body);
+        
+        // Handle avatar upload if any
+        const avatarFile = document.getElementById('f_profile_avatar').files[0];
+        if (avatarFile) {
+          const formData = new FormData();
+          formData.append('file', avatarFile);
+          await fetch('/api/me/avatar', {
+            method: 'POST',
+            body: formData
+          });
+        }
+
+        alert('Profile updated!');
+        location.reload();
+      } catch (err) {
+        alert('Error: ' + err.message);
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Profile';
+      }
+    };
   }
 
   const enableDmsBtn = document.getElementById('enableDmsBtn');
@@ -781,16 +759,16 @@ async function init() {
       try {
         enableDmsBtn.disabled = true;
         enableDmsBtn.textContent = 'Generating Keys...';
-        
+
         const cryptoModule = await import('./crypto.js');
         const { publicJwk } = await cryptoModule.generateKeyPair();
-        
+
         const apiModule = await import('./api.js');
         await apiModule.updateProfile({ public_key: JSON.stringify(publicJwk) });
-        
+
         alert('Encrypted DMs enabled successfully!');
         enableDmsBtn.style.display = 'none';
-        
+
         // Refresh local user state
         await checkUserAuth();
       } catch (err) {
@@ -807,116 +785,67 @@ async function init() {
       const cryptoModule = await import('./crypto.js');
       const key = await cryptoModule.exportPrivateKey();
       if (!key) return alert('No key found to backup.');
-      
+
       const blob = new Blob([key], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `jojomap-chat-key-${currentUser.username || 'user'}.json`;
-      document.body.appendChild(a);
+      a.download = `jojomap-dm-key-${currentUser.username}.json`;
       a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
     };
   }
 
-  const importKeyFile = document.getElementById('importKeyFile');
-  if (importKeyFile) {
-    importKeyFile.onchange = (e) => {
+  const restoreKeyBtn = document.getElementById('restoreKeyBtn');
+  const restoreKeyFile = document.getElementById('restoreKeyFile');
+  if (restoreKeyBtn && restoreKeyFile) {
+    restoreKeyBtn.onclick = () => restoreKeyFile.click();
+    restoreKeyFile.onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = async (event) => {
         try {
-          const keyString = event.target.result;
           const cryptoModule = await import('./crypto.js');
-          cryptoModule.storePrivateKey(keyString);
-          alert('Key imported successfully! Your DMs are now accessible on this device.');
+          await cryptoModule.importPrivateKey(event.target.result);
+          alert('DM Key restored successfully!');
           location.reload();
         } catch (err) {
-          alert('Failed to import key: ' + err.message);
+          alert('Failed to restore key: ' + err.message);
         }
       };
       reader.readAsText(file);
     };
   }
+}
 
-  const reportForm = document.getElementById('reportForm');
-  const closeReportModalBtn = document.getElementById('closeReportModalBtn');
-  if (reportForm) {
-    reportForm.onsubmit = async (e) => {
-      e.preventDefault();
-      const feature_id = document.getElementById('r_feature_id').value;
-      const report_type = document.getElementById('r_type').value;
-      const description = document.getElementById('r_description').value;
+function renderRecentChats() {
+  const container = document.getElementById('recentChatsList');
+  if (!container) return;
+  
+  const recent = JSON.parse(localStorage.getItem('recent_chats') || '[]');
+  if (recent.length === 0) {
+    container.innerHTML = '<div style="text-align:center; opacity:0.5; padding:20px;">No recent DMs. Visit a rider\'s profile to start a chat.</div>';
+    return;
+  }
 
-      try {
-        const submitBtn = reportForm.querySelector('button[type="submit"]');
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Submitting...';
+  const { getAvatarHtml } = import('./utils.js');
 
-        const { createReport } = await import('./api.js');
-        await createReport({ feature_id, report_type, description });
-
-        alert('Report submitted! Thank you for helping the community.');
-        document.getElementById('reportModal').style.display = 'none';
-        reportForm.reset();
-        await refreshData();
-      } catch (err) {
-        alert('Failed to submit report: ' + err.message);
-      } finally {
-        const submitBtn = reportForm.querySelector('button[type="submit"]');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Submit Report';
-      }
+  container.innerHTML = '';
+  recent.forEach(u => {
+    const tile = document.createElement('div');
+    tile.className = 'tile-btn user-tile';
+    tile.innerHTML = `
+      ${getAvatarHtml ? getAvatarHtml(u, 'avatar-sm') : `<img src="${u.avatar_url || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23ccc%22/></svg>'}" class="avatar-sm">`}
+      <div class="flex-1">
+        <div class="font-bold text-sm">${u.username}</div>
+      </div>
+    `;
+    tile.onclick = async () => {
+      const chatModule = await import('./chat.js');
+      chatModule.openChat(currentUser, u);
     };
-  }
-
-  if (closeReportModalBtn) {
-    closeReportModalBtn.onclick = () => {
-      document.getElementById('reportModal').style.display = 'none';
-    };
-  }
-
-  const profileEditForm = document.getElementById('profileEditForm');
-  if (profileEditForm) {
-    profileEditForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const saveBtn = document.getElementById('saveProfileBtn');
-      try {
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Saving...';
-        
-        const username = document.getElementById('f_profile_username').value;
-        const bio = document.getElementById('f_profile_bio').value;
-        const social_links = Array.from(document.querySelectorAll('.profile-social-row')).map(row => 
-          row.querySelector('.social-url').value
-        ).filter(url => url);
-
-        import('./api.js').then(async (api) => {
-          await api.updateProfile({ username, bio, social_links });
-          
-          const avatarInput = document.getElementById('f_avatar_upload');
-          if (avatarInput.files && avatarInput.files[0]) {
-            await api.uploadAvatar(avatarInput.files[0]);
-          }
-
-          document.getElementById('profileEditModal').style.display = 'none';
-          alert('Profile updated successfully!');
-          location.reload();
-        }).catch(err => {
-          alert('Error: ' + err.message);
-        }).finally(() => {
-          saveBtn.disabled = false;
-          saveBtn.textContent = 'Save Profile';
-        });
-      } catch (err) {
-        alert('Error: ' + err.message);
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save Profile';
-      }
-    });
-  }
+    container.appendChild(tile);
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);

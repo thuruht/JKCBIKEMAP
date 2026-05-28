@@ -21,8 +21,8 @@
 - [x] Add field reports (Backend/Frontend).
 - [x] Encrypted Chat (Durable Objects + PartyServer).
 - [x] Resilient Profile API (fallback to email prefix).
-- [ ] Comments system.
-- [ ] Moderation queue.
+- [x] Comments system.
+- [x] Moderation queue.
 - [ ] Saved features/routes.
 - [ ] Notifications for project status changes.
 

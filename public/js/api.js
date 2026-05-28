@@ -117,6 +117,20 @@ export async function fetchCommunityStats() {
   return await res.json();
 }
 
+export async function fetchReports() {
+  const res = await fetch('/api/reports');
+  if (!res.ok) throw new Error('Failed to fetch moderation reports');
+  return await res.json();
+}
+
+export async function resolveReport(id) {
+  const res = await fetch(`/api/reports/${id}/resolve`, {
+    method: 'POST'
+  });
+  if (!res.ok) throw new Error('Failed to resolve report');
+  return await res.json();
+}
+
 export async function fetchChatToken() {
   const res = await fetch('/api/me/chat-token');
   if (!res.ok) throw new Error('Failed to fetch chat token');

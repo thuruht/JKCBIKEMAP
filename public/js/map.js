@@ -231,8 +231,8 @@ export function renderMap(features, allFeaturesCount, onFeatureClick, onMarkerDr
       const isPlanned = f.officiality === 'planned' || f.category === 'Planned / in progress';
       const poly = L.polyline(coords, {
         color: meta.swatch,
-        weight: f.category === 'Official Regional Data' ? 3 : 5,
-        dashArray: isPlanned ? '10 8' : null
+        weight: meta.lineWeight || 5,
+        dashArray: meta.lineDash || (isPlanned ? '10 10' : null)
       }).addTo(targetGroup);
       poly.on('click', () => onFeatureClick(f));
       f._layer = poly;

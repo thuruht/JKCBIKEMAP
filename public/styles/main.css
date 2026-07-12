@@ -27,6 +27,8 @@ body{font-family:var(--font-body);font-size:var(--text-base);line-height:1.6;col
 a{color:inherit} button{font:inherit;cursor:pointer;background:none;border:none}
 :focus-visible{outline:2px solid var(--color-primary);outline-offset:3px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+/* Regression guard: the Layers and Navigate drawers depend on this class to start collapsed. */
+.hidden{display:none!important}
 
 .app{display:flex;height: 100dvh; width: 100vw; position: relative; z-index: 2;}
 

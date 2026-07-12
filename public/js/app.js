@@ -261,6 +261,7 @@ async function init() {
   userLogoutBtn = document.getElementById('userLogoutBtn');
 
   // Toggle Layers Section
+  // IMPORTANT: these drawers start with class="hidden"; ensure main.css always defines .hidden { display: none !important; }
   const toggleLayersBtn = document.getElementById('toggleLayersBtn');
   const layersContent = document.getElementById('layersContent');
   const layersChevron = document.getElementById('layersChevron');

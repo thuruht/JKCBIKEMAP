@@ -30,6 +30,44 @@ a{color:inherit} button{font:inherit;cursor:pointer;background:none;border:none}
 /* Regression guard: the Layers and Navigate drawers depend on this class to start collapsed. */
 .hidden{display:none!important}
 
+.opacity-slider {
+  width: 100%;
+  accent-color: var(--color-primary);
+  margin: -6px 0 8px 0;
+}
+
+.suggestions-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--color-surface-offset);
+  border: 1px solid var(--color-border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  max-height: 160px;
+  overflow-y: auto;
+  box-shadow: var(--shadow-md);
+}
+
+.suggestions-list div {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.suggestions-list div:hover,
+.suggestions-list div.active {
+  background: var(--color-primary-soft);
+}
+
+.plan-pref.active {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
 .app{display:flex;height: 100dvh; width: 100vw; position: relative; z-index: 2;}
 
 .crypt-grid {

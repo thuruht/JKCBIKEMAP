@@ -73,7 +73,8 @@
         <div style="display: flex; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden;">
           <button id="tab-explore" class="jump-btn active" style="flex: 1; text-align: center; border: none; border-radius: 0;">Explore</button>
           <button id="tab-search" class="jump-btn" style="flex: 1; text-align: center; border: none; border-radius: 0;">Search</button>
-          <button id="tab-community" class="jump-btn" style="flex: 1; text-align: center; border: none; border-radius: 0; border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border);">Community</button>
+          <button id="tab-plan" class="jump-btn" style="flex: 1; text-align: center; border: none; border-radius: 0; border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border);">Plan</button>
+          <button id="tab-community" class="jump-btn" style="flex: 1; text-align: center; border: none; border-radius: 0; border-right: 1px solid var(--color-border);">Community</button>
           <button id="tab-messages" class="jump-btn" style="flex: 1; text-align: center; border: none; border-radius: 0; border-right: 1px solid var(--color-border);">DMs</button>
           <button id="tab-admin" class="jump-btn" style="flex: 1; text-align: center; border: none; border-radius: 0;">Staff</button>
         </div>
@@ -129,6 +130,7 @@
               </div>
             </div>
 
+            <p style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-primary); margin-bottom: 6px;">Map Data</p>
             <div class="legend-stack" style="margin-bottom: var(--space-4);">
               <label class="layer-toggle">
                 <input type="checkbox" id="layer-knowledge" checked>
@@ -139,27 +141,67 @@
                 <span class="summary-label">Official Regional Data (MARC)</span>
               </label>
               <label class="layer-toggle">
+                <input type="checkbox" id="layer-planned">
+                <span class="summary-label">Planned / In Progress</span>
+              </label>
+              <label class="layer-toggle">
                 <input type="checkbox" id="layer-reports" checked>
                 <span class="summary-label">Field Reports & Alerts</span>
               </label>
-              <label class="layer-toggle">
-                <input type="checkbox" id="layer-amenities">
-                <span class="summary-label">Rider Amenities (OSM)</span>
-              </label>
-              
+
               <div style="height: 1px; background: var(--color-border); margin: 8px 0;"></div>
-              
+
+              <p style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-primary); margin-bottom: 2px;">Rider Amenities</p>
+              <label class="layer-toggle">
+                <input type="checkbox" id="amenity-water">
+                <span class="summary-label">Water & Restrooms</span>
+              </label>
+              <label class="layer-toggle">
+                <input type="checkbox" id="amenity-repair">
+                <span class="summary-label">Repair Stations</span>
+              </label>
+              <label class="layer-toggle">
+                <input type="checkbox" id="amenity-shop">
+                <span class="summary-label">Bike Shops</span>
+              </label>
+              <label class="layer-toggle">
+                <input type="checkbox" id="amenity-food">
+                <span class="summary-label">Food / Rest Stop</span>
+              </label>
+            </div>
+
+            <p style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-primary); margin-bottom: 6px;">Context Overlays</p>
+            <div class="legend-stack" style="margin-bottom: var(--space-4);">
               <label class="layer-toggle">
                 <input type="checkbox" id="overlay-railway">
                 <span class="summary-label">Railway Lines</span>
               </label>
+              <input type="range" id="opacity-railway" min="0" max="1" step="0.1" value="0.7" class="opacity-slider">
               <label class="layer-toggle">
                 <input type="checkbox" id="overlay-cycling_routes" checked>
                 <span class="summary-label">Cycling Routes (Waymarked)</span>
               </label>
+              <input type="range" id="opacity-cycling_routes" min="0" max="1" step="0.1" value="0.8" class="opacity-slider">
               <label class="layer-toggle">
                 <input type="checkbox" id="overlay-hiking_trails" checked>
                 <span class="summary-label">Hiking Trails (Waymarked)</span>
+              </label>
+              <input type="range" id="opacity-hiking_trails" min="0" max="1" step="0.1" value="0.8" class="opacity-slider">
+            </div>
+
+            <p style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-primary); margin-bottom: 6px;">Show / Hide By Type</p>
+            <div class="legend-stack" style="margin-bottom: 0;">
+              <label class="layer-toggle">
+                <input type="checkbox" id="filter-official" checked>
+                <span class="summary-label">Official</span>
+              </label>
+              <label class="layer-toggle">
+                <input type="checkbox" id="filter-unofficial" checked>
+                <span class="summary-label">Unofficial / Local</span>
+              </label>
+              <label class="layer-toggle">
+                <input type="checkbox" id="filter-planned" checked>
+                <span class="summary-label">Planned / Social</span>
               </label>
             </div>
           </div>
@@ -174,6 +216,61 @@
             </select>
             <div id="featureTiles" class="tiles-grid"></div>
           </div>
+        </section>
+      </div>
+
+      <div id="panel-plan" style="display: none;">
+        <section class="panel">
+          <h2>Plan a Route</h2>
+          <p style="font-size: 13px; color: var(--color-text-muted); margin-bottom: 12px; font-weight: 500;">Pick a start and destination. Routing uses OpenStreetMap data via Valhalla/BRouter.</p>
+
+          <div style="display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-4);">
+            <div class="field" style="position: relative;">
+              <label style="font-size: var(--text-xs); font-weight: 600; display: block; margin-bottom: 4px;">Start</label>
+              <input type="text" id="planStartInput" placeholder="e.g. Plaza or 31st & Main" class="jump-btn" style="width: 100%; background: var(--color-bg);" autocomplete="off">
+              <div id="planStartSuggestions" class="suggestions-list" style="display: none;"></div>
+            </div>
+
+            <div class="field" style="position: relative;">
+              <label style="font-size: var(--text-xs); font-weight: 600; display: block; margin-bottom: 4px;">Destination</label>
+              <input type="text" id="planEndInput" placeholder="e.g. Minor Park" class="jump-btn" style="width: 100%; background: var(--color-bg);" autocomplete="off">
+              <div id="planEndSuggestions" class="suggestions-list" style="display: none;"></div>
+            </div>
+
+            <div class="field">
+              <label style="font-size: var(--text-xs); font-weight: 600; display: block; margin-bottom: 4px;">Route Style</label>
+              <div style="display: flex; gap: 4px;">
+                <button id="planPrefBalanced" class="jump-btn plan-pref active" data-pref="balanced" style="flex: 1; text-align: center;">Balanced</button>
+                <button id="planPrefQuiet" class="jump-btn plan-pref" data-pref="quiet" style="flex: 1; text-align: center;">Quiet</button>
+                <button id="planPrefFast" class="jump-btn plan-pref" data-pref="fast" style="flex: 1; text-align: center;">Fast</button>
+              </div>
+            </div>
+
+            <button id="planRouteBtn" class="jump-btn" style="width: 100%; text-align: center; background: var(--color-primary); color: white; font-weight: 700;">Find Route</button>
+          </div>
+
+          <div id="planSummary" style="display: none; background: var(--color-surface-offset); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-4); margin-bottom: var(--space-4);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);">
+              <span style="font-size: var(--text-sm); font-weight: 700;">Route Summary</span>
+              <span id="planSource" style="font-size: 9px; opacity: 0.6; text-transform: uppercase;"></span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: var(--space-3);">
+              <div>
+                <div style="font-size: 10px; opacity: 0.6; text-transform: uppercase;">Distance</div>
+                <div id="planDistance" style="font-size: 18px; font-weight: 700;">-</div>
+              </div>
+              <div>
+                <div style="font-size: 10px; opacity: 0.6; text-transform: uppercase;">Time</div>
+                <div id="planTime" style="font-size: 18px; font-weight: 700;">-</div>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button id="planClearBtn" class="jump-btn" style="flex: 1; text-align: center;">Clear</button>
+              <button id="planExportBtn" class="jump-btn" style="flex: 1; text-align: center; background: var(--color-primary-soft); color: var(--color-primary);">Export GPX</button>
+            </div>
+          </div>
+
+          <div id="planTurns" class="tiles-grid" style="max-height: 30vh; overflow-y: auto;"></div>
         </section>
       </div>
 

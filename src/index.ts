@@ -1,13 +1,16 @@
-import { D1Database, Fetcher, R2Bucket } from "@cloudflare/workers-types";
+import type { ExecutionContext } from "@cloudflare/workers-types";
+import { Hono } from "hono";
+import { routeRoutes } from "./routes/route.js";
+import { geocodeRoutes } from "./routes/geocode.js";
+import { healthRoutes } from "./routes/health.js";
+import type { Env } from "./types.js";
 
-export interface Env {
-  DB: D1Database;
-  ASSETS: Fetcher;
-  KV: KVNamespace; // Cloudflare KV for user preferences
-  SEND_EMAIL: any; // Cloudflare Email Sending Beta
-  AVATARS_BUCKET: R2Bucket;
-  APP_URL?: string;
-}
+export type { Env };
+
+const apiApp = new Hono<{ Bindings: Env }>();
+apiApp.route("/api/route", routeRoutes);
+apiApp.route("/api", geocodeRoutes); // /api/geocode + /api/reverse
+apiApp.route("/api/health", healthRoutes);
 
 const RBAC_SCHEMA: Record<string, string[]> = {
   "public": [
@@ -146,8 +149,18 @@ async function awardBadge(env: Env, userId: string, badgeId: string) {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    // Bikeroutes-ported routing/geocoding/health endpoints
+    if (
+      url.pathname.startsWith("/api/route") ||
+      url.pathname === "/api/geocode" ||
+      url.pathname === "/api/reverse" ||
+      url.pathname === "/api/health"
+    ) {
+      return apiApp.fetch(request, env, ctx);
+    }
 
     // Auth Routes
     if (url.pathname.startsWith("/auth/")) {
@@ -700,7 +713,7 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       const bbox = url.searchParams.get("bbox");
       if (!bbox) return new Response("Missing bbox", { status: 400 });
 
-      const query = `[out:json][timeout:25];(node["amenity"~"drinking_water|bicycle_repair_station"](${bbox});node["shop"="bicycle"](${bbox}););out;`;
+      const query = `[out:json][timeout:25];(node["amenity"~"drinking_water|toilets|bicycle_repair_station|restaurant|fast_food|cafe"](${bbox});node["shop"="bicycle"](${bbox}););out;`;
 
       let resp = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`, {
         headers: { 'User-Agent': 'JojoKCMap/1.0 (Cloudflare Worker; contact: admin@jojomap.kcmo.xyz)' }

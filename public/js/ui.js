@@ -275,7 +275,7 @@ export function updateInfoCard(f, infoCardElement, userPermissions = []) {
 }
 
 export function switchTab(tabId) {
-  const tabs = ['explore', 'search', 'community', 'messages', 'admin'];
+  const tabs = ['explore', 'search', 'plan', 'community', 'messages', 'admin'];
   tabs.forEach(t => {
     const btn = document.getElementById(`tab-${t}`);
     const panel = document.getElementById(`panel-${t}`);

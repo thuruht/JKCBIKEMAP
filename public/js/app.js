@@ -1,13 +1,19 @@
 import { fetchFeatures, createFeature, updateFeature, fetchMe, assignUserRole, fetchPublicProfiles, fetchCommunityStats } from './api.js';
-import { initLeafletMap, renderMap, flyToFeature, enableMapPicker, toggleLayer, fetchAmenities, map, switchBasemap, toggleOverlay, startLineDrawing } from './map.js';
+import { initLeafletMap, renderMap, flyToFeature, enableMapPicker, toggleLayer, fetchAmenities, map, switchBasemap, toggleOverlay, setOverlayOpacity, drawRoute, clearRoute, getRouteShape, startLineDrawing } from './map.js';
 import { updateInfoCard, renderLegend, initThemeToggle, openModal, closeModal, openHelpModal, closeHelpModal, switchTab } from './ui.js';
 import { downloadGeoJSON, getCategoryMeta } from './utils.js';
 
 // DOM Elements (Global references assigned in init)
 let infoCard, legendStack, searchInput, helpBtn, quickReportBtn, adminActions, exportGeoJsonBtn, importMarcBtn, addPointBtn, addLineBtn, featureForm, basemapSelect, saveDefaultBasemapBtn;
 let adminAuthRequired, moderationQueueSection, moderationQueueList, roleManagementSection, targetUserEmail, targetUserRole, assignRoleBtn, featureActions;
-let tabExplore, tabSearch, tabCommunity, tabMessages, tabAdmin;
+let tabExplore, tabSearch, tabPlan, tabCommunity, tabMessages, tabAdmin;
 let sendMagicLinkBtn, loginEmailInput, userLoggedOutView, userLoggedInView, userEmailDisplay, userLogoutBtn;
+
+// Plan route DOM refs
+let planStartInput, planEndInput, planStartSuggestions, planEndSuggestions;
+let planRouteBtn, planClearBtn, planExportBtn, planSummary, planDistance, planTime, planTurns, planSource;
+let planWaypoints = { start: null, end: null }; // { lat, lon, label }
+let activePlanPref = 'balanced';
 
 let allFeatures = [];
 let currentUser = null;
@@ -49,10 +55,7 @@ function updateAdminUI() {
     if (adminActions) adminActions.style.display = 'none';
   }
 
-  if (allFeatures.length) {
-    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, userPermissions), handleMarkerDrag, isStaff || isAdmin);
-    renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, userPermissions)));
-  }
+  refreshMapWithFilters();
 }
 
 async function refreshModerationQueue() {
@@ -105,12 +108,49 @@ async function refreshModerationQueue() {
   }
 }
 
+function getVisibleFeatures() {
+  const knowledgeOn = document.getElementById('layer-knowledge')?.checked ?? true;
+  const officialOn = document.getElementById('layer-official')?.checked ?? false;
+  const plannedOn = document.getElementById('layer-planned')?.checked ?? true;
+  const reportsOn = document.getElementById('layer-reports')?.checked ?? true;
+
+  const filterOfficial = document.getElementById('filter-official')?.checked ?? true;
+  const filterUnofficial = document.getElementById('filter-unofficial')?.checked ?? true;
+  const filterPlanned = document.getElementById('filter-planned')?.checked ?? true;
+
+  return allFeatures.filter(f => {
+    // category / layer filters
+    if (f.category === 'Official Regional Data') {
+      if (!officialOn) return false;
+    } else if (f.category === 'Field Reports') {
+      if (!reportsOn) return false;
+    } else if (f.category === 'Planned / in progress' || f.officiality === 'planned') {
+      if (!plannedOn) return false;
+    } else {
+      if (!knowledgeOn) return false;
+    }
+
+    // officiality filters
+    const off = f.officiality || 'official';
+    if (off === 'official' && !filterOfficial) return false;
+    if (off === 'unofficial' && !filterUnofficial) return false;
+    if ((off === 'planned' || off === 'social') && !filterPlanned) return false;
+
+    return true;
+  });
+}
+
+function refreshMapWithFilters() {
+  const isStaff = checkIsStaff();
+  const visible = getVisibleFeatures();
+  renderMap(visible, allFeatures.length, (f) => updateInfoCard(f, infoCard, userPermissions), handleMarkerDrag, isStaff);
+  renderLegend(visible, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, userPermissions)));
+}
+
 async function refreshData() {
   try {
     allFeatures = await fetchFeatures();
-    const isStaff = checkIsStaff();
-    renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, userPermissions), handleMarkerDrag, isStaff);
-    renderLegend(allFeatures, legendStack, (f) => flyToFeature(f, (feature) => updateInfoCard(feature, infoCard, userPermissions)));
+    refreshMapWithFilters();
   } catch (err) {
     console.error('Failed to fetch features:', err);
   }
@@ -249,6 +289,7 @@ async function init() {
 
   tabExplore = document.getElementById('tab-explore');
   tabSearch = document.getElementById('tab-search');
+  tabPlan = document.getElementById('tab-plan');
   tabCommunity = document.getElementById('tab-community');
   tabMessages = document.getElementById('tab-messages');
   tabAdmin = document.getElementById('tab-admin');
@@ -259,6 +300,20 @@ async function init() {
   userLoggedInView = document.getElementById('user-logged-in');
   userEmailDisplay = document.getElementById('userEmailDisplay');
   userLogoutBtn = document.getElementById('userLogoutBtn');
+
+  // Plan route refs
+  planStartInput = document.getElementById('planStartInput');
+  planEndInput = document.getElementById('planEndInput');
+  planStartSuggestions = document.getElementById('planStartSuggestions');
+  planEndSuggestions = document.getElementById('planEndSuggestions');
+  planRouteBtn = document.getElementById('planRouteBtn');
+  planClearBtn = document.getElementById('planClearBtn');
+  planExportBtn = document.getElementById('planExportBtn');
+  planSummary = document.getElementById('planSummary');
+  planDistance = document.getElementById('planDistance');
+  planTime = document.getElementById('planTime');
+  planTurns = document.getElementById('planTurns');
+  planSource = document.getElementById('planSource');
 
   // Toggle Layers Section
   // IMPORTANT: these drawers start with class="hidden"; ensure main.css always defines .hidden { display: none !important; }
@@ -331,7 +386,7 @@ async function init() {
 
       if (!q) {
         if (searchResultsList) searchResultsList.innerHTML = '';
-        renderMap(allFeatures, allFeatures.length, (f) => updateInfoCard(f, infoCard, userPermissions), handleMarkerDrag, isStaff);
+        refreshMapWithFilters();
         return;
       }
 
@@ -624,6 +679,15 @@ async function init() {
     };
   }
   if (tabAdmin) tabAdmin.onclick = () => switchTab('admin');
+  if (tabPlan) {
+    tabPlan.onclick = () => {
+      switchTab('plan');
+      // keep route summary visible if present
+    };
+  }
+
+  initPlanRoute();
+  initLayerFilters();
 
   if (helpBtn) helpBtn.onclick = openHelpModal;
 
@@ -684,24 +748,50 @@ async function init() {
   }
 
   // Layer Toggles
-  const toggles = [
-    { id: 'layer-knowledge', type: 'layer', name: 'knowledge' },
-    { id: 'layer-official', type: 'layer', name: 'official' },
-    { id: 'layer-reports', type: 'layer', name: 'reports' },
-    { id: 'layer-amenities', type: 'layer', name: 'amenities' },
-    { id: 'overlay-railway', type: 'overlay', name: 'railway' },
-    { id: 'overlay-cycling_routes', type: 'overlay', name: 'cycling_routes' },
-    { id: 'overlay-hiking_trails', type: 'overlay', name: 'hiking_trails' }
+  const layerToggles = [
+    { id: 'layer-knowledge', name: 'knowledge' },
+    { id: 'layer-official', name: 'official' },
+    { id: 'layer-planned', name: 'planned' },
+    { id: 'layer-reports', name: 'reports' },
+    { id: 'amenity-water', name: 'amenity_water' },
+    { id: 'amenity-repair', name: 'amenity_repair' },
+    { id: 'amenity-shop', name: 'amenity_shop' },
+    { id: 'amenity-food', name: 'amenity_food' },
   ];
 
-  toggles.forEach(t => {
+  layerToggles.forEach(t => {
     const el = document.getElementById(t.id);
     if (el) {
-      el.onchange = (e) => {
-        if (t.type === 'layer') toggleLayer(t.name, e.target.checked);
-        else toggleOverlay(t.name, e.target.checked);
+      el.onchange = () => {
+        refreshMapWithFilters();
+        // amenity sub-layers toggle directly
+        if (t.name.startsWith('amenity_')) {
+          toggleLayer(t.name, el.checked);
+          fetchAmenities();
+        } else if (t.name !== 'knowledge') {
+          toggleLayer(t.name, el.checked);
+        }
       };
     }
+  });
+
+  // Overlay toggles + opacity
+  const overlays = ['railway', 'cycling_routes', 'hiking_trails'];
+  overlays.forEach(name => {
+    const toggle = document.getElementById(`overlay-${name}`);
+    const slider = document.getElementById(`opacity-${name}`);
+    if (toggle) {
+      toggle.onchange = (e) => toggleOverlay(name, e.target.checked);
+    }
+    if (slider) {
+      slider.oninput = (e) => setOverlayOpacity(name, parseFloat(e.target.value));
+    }
+  });
+
+  // Officiality / type filters
+  ['filter-official', 'filter-unofficial', 'filter-planned'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.onchange = refreshMapWithFilters;
   });
 
   // Profile Edit
@@ -847,6 +937,216 @@ function renderRecentChats() {
     };
     container.appendChild(tile);
   });
+}
+
+// ─── Plan Route helpers ─────────────────────────────────────────────────────
+
+function initPlanRoute() {
+  if (!planStartInput || !planEndInput) return;
+
+  let startTimer, endTimer;
+
+  planStartInput.addEventListener('input', (e) => {
+    clearTimeout(startTimer);
+    const q = e.target.value.trim();
+    if (q.length < 3) {
+      if (planStartSuggestions) planStartSuggestions.style.display = 'none';
+      return;
+    }
+    startTimer = setTimeout(() => fetchSuggestions(q, planStartSuggestions, 'start'), 250);
+  });
+
+  planEndInput.addEventListener('input', (e) => {
+    clearTimeout(endTimer);
+    const q = e.target.value.trim();
+    if (q.length < 3) {
+      if (planEndSuggestions) planEndSuggestions.style.display = 'none';
+      return;
+    }
+    endTimer = setTimeout(() => fetchSuggestions(q, planEndSuggestions, 'end'), 250);
+  });
+
+  // Close suggestions on outside click
+  document.addEventListener('click', (e) => {
+    if (planStartSuggestions && !planStartInput.contains(e.target) && !planStartSuggestions.contains(e.target)) {
+      planStartSuggestions.style.display = 'none';
+    }
+    if (planEndSuggestions && !planEndInput.contains(e.target) && !planEndSuggestions.contains(e.target)) {
+      planEndSuggestions.style.display = 'none';
+    }
+  });
+
+  // Preference buttons
+  document.querySelectorAll('.plan-pref').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.plan-pref').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activePlanPref = btn.dataset.pref || 'balanced';
+    });
+  });
+
+  if (planRouteBtn) planRouteBtn.addEventListener('click', doPlanRoute);
+  if (planClearBtn) planClearBtn.addEventListener('click', clearPlanRoute);
+  if (planExportBtn) planExportBtn.addEventListener('click', exportRouteGPX);
+}
+
+async function fetchSuggestions(q, container, which) {
+  if (!container) return;
+  try {
+    const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
+    if (!res.ok) throw new Error('Geocode failed');
+    const data = await res.json();
+    if (!data.length) {
+      container.style.display = 'none';
+      return;
+    }
+    container.innerHTML = '';
+    data.slice(0, 5).forEach(result => {
+      const div = document.createElement('div');
+      div.textContent = result.label;
+      div.addEventListener('click', () => selectWaypoint(which, result, container));
+      container.appendChild(div);
+    });
+    container.style.display = 'block';
+  } catch (err) {
+    console.warn('Suggestion fetch failed:', err);
+    container.style.display = 'none';
+  }
+}
+
+function selectWaypoint(which, result, container) {
+  planWaypoints[which] = { lat: result.lat, lon: result.lng, label: result.short || result.label };
+  const input = which === 'start' ? planStartInput : planEndInput;
+  if (input) input.value = planWaypoints[which].label;
+  if (container) container.style.display = 'none';
+}
+
+function planCostingOptions() {
+  const base = { bicycle: { use_hills: 0.5 } };
+  switch (activePlanPref) {
+    case 'quiet': base.bicycle.use_roads = 0.2; break;
+    case 'fast': base.bicycle.use_roads = 0.8; break;
+    default: base.bicycle.use_roads = 0.5; break;
+  }
+  return base;
+}
+
+async function doPlanRoute() {
+  if (!planWaypoints.start || !planWaypoints.end) {
+    alert('Please select a start and destination from the suggestions.');
+    return;
+  }
+  if (planRouteBtn) {
+    planRouteBtn.disabled = true;
+    planRouteBtn.textContent = 'Routing...';
+  }
+
+  try {
+    const body = {
+      locations: [
+        { lat: planWaypoints.start.lat, lon: planWaypoints.start.lon, label: planWaypoints.start.label },
+        { lat: planWaypoints.end.lat, lon: planWaypoints.end.lon, label: planWaypoints.end.label },
+      ],
+      costing: 'bicycle',
+      costing_options: planCostingOptions(),
+    };
+
+    const res = await fetch('/api/route', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) throw new Error('Route request failed');
+    const data = await res.json();
+
+    const leg = data.trip?.legs?.[0];
+    if (!leg || !leg.shape) throw new Error('No route returned');
+
+    drawRoute(leg.shape);
+    showPlanSummary(leg, res.headers.get('X-Route-Source') || 'unknown');
+  } catch (err) {
+    alert('Could not plan route: ' + err.message);
+    console.error(err);
+  } finally {
+    if (planRouteBtn) {
+      planRouteBtn.disabled = false;
+      planRouteBtn.textContent = 'Find Route';
+    }
+  }
+}
+
+function formatDistance(km) {
+  const miles = km * 0.621371;
+  if (miles < 0.1) return `${(miles * 5280).toFixed(0)} ft`;
+  return `${miles.toFixed(1)} mi`;
+}
+
+function formatTime(seconds) {
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${h}h ${m}m`;
+}
+
+function showPlanSummary(leg, source) {
+  if (!planSummary) return;
+  const summary = leg.summary || {};
+  if (planDistance) planDistance.textContent = formatDistance(summary.length || 0);
+  if (planTime) planTime.textContent = formatTime(summary.time || 0);
+  if (planSource) planSource.textContent = `via ${source}`;
+
+  if (planTurns && leg.maneuvers) {
+    planTurns.innerHTML = '';
+    leg.maneuvers.slice(1, -1).forEach((m, i) => {
+      const div = document.createElement('div');
+      div.className = 'tile-btn';
+      div.style.fontSize = '12px';
+      div.innerHTML = `<strong>${i + 1}.</strong> ${m.instruction || 'Continue'}`;
+      planTurns.appendChild(div);
+    });
+  }
+
+  planSummary.style.display = 'block';
+}
+
+function clearPlanRoute() {
+  clearRoute();
+  planWaypoints = { start: null, end: null };
+  if (planStartInput) planStartInput.value = '';
+  if (planEndInput) planEndInput.value = '';
+  if (planSummary) planSummary.style.display = 'none';
+  if (planTurns) planTurns.innerHTML = '';
+}
+
+function exportRouteGPX() {
+  const shape = getRouteShape();
+  if (!shape || shape.length < 2) return alert('No route to export.');
+
+  const trkpts = shape.map(c => `    <trkpt lat="${c[1]}" lon="${c[0]}"></trkpt>`).join('\n');
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="JKC Bike Map">
+  <trk>
+    <name>Planned Route</name>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>`;
+
+  const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `jojomap-route-${new Date().toISOString().slice(0, 10)}.gpx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function initLayerFilters() {
+  // initial filter pass; actual visibility is driven by checkbox state
+  refreshMapWithFilters();
 }
 
 document.addEventListener('DOMContentLoaded', init);

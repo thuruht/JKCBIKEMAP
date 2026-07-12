@@ -17,6 +17,11 @@ binding = "KV"
 id = "b9d90043ab294eafb7513be63ef51070"
 preview_id = "0ca8e11e659d4bd192407a0dc7a0a366"
 
+[[kv_namespaces]]
+binding = "ROUTE_CACHE"
+id = "29b680a7df804023b1d18fc8668b4227"
+preview_id = "45f57c0dd9e54664ae316f27f382a6bc"
+
 [[send_email]]
 name = "SEND_EMAIL"
 

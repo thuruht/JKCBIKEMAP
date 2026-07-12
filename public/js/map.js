@@ -70,8 +70,13 @@ const basemaps = {
 let layers = {
   knowledge: L.layerGroup(),
   official: L.layerGroup(),
+  planned: L.layerGroup(),
   reports: L.layerGroup(),
-  amenities: L.layerGroup(),
+  // Amenity sub-layers (populated by OSM)
+  amenity_water: L.layerGroup(),
+  amenity_repair: L.layerGroup(),
+  amenity_shop: L.layerGroup(),
+  amenity_food: L.layerGroup(),
   // OVERLAYS
   railway: L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenRailwayMap', maxZoom: 19, transparent: true, opacity: 0.7
@@ -83,6 +88,8 @@ let layers = {
     attribution: '&copy; Waymarked Trails', maxZoom: 18, transparent: true, opacity: 0.8
   })
 };
+
+let routeLayer = null;
 
 export function initLeafletMap(elementId, center, zoom) {
   map = L.map(elementId, {
@@ -96,8 +103,18 @@ export function initLeafletMap(elementId, center, zoom) {
   // Add feature layers to map
   layers.knowledge.addTo(map);
   layers.official.addTo(map);
+  layers.planned.addTo(map);
   layers.reports.addTo(map);
-  layers.amenities.addTo(map);
+  // Amenities start off; sub-layers are toggled independently
+  layers.amenity_water.addTo(map);
+  layers.amenity_repair.addTo(map);
+  layers.amenity_shop.addTo(map);
+  layers.amenity_food.addTo(map);
+  // ensure they are removed by default until explicitly enabled
+  map.removeLayer(layers.amenity_water);
+  map.removeLayer(layers.amenity_repair);
+  map.removeLayer(layers.amenity_shop);
+  map.removeLayer(layers.amenity_food);
 
   // Add default overlays
   layers.cycling_routes.addTo(map);
@@ -124,15 +141,71 @@ export function toggleOverlay(id, visible) {
   }
 }
 
+export function setOverlayOpacity(id, value) {
+  if (layers[id] && layers[id].setOpacity) {
+    layers[id].setOpacity(value);
+  }
+}
+
+let routePolyline = null;
+let routeShape = []; // [lon, lat] pairs for export
+
+export function drawRoute(shape, fit = true) {
+  if (!shape || shape.length < 2) return;
+  clearRoute();
+  routeShape = shape;
+  // shape is array of [lon, lat]; Leaflet wants [lat, lon]
+  const latlngs = shape.map((c) => [c[1], c[0]]);
+  routePolyline = L.polyline(latlngs, {
+    color: '#0ea5e9ff',
+    weight: 6,
+    opacity: 0.9,
+    lineCap: 'round',
+    lineJoin: 'round',
+  }).addTo(map);
+  if (fit) map.fitBounds(routePolyline.getBounds(), { padding: [40, 40] });
+}
+
+export function clearRoute() {
+  if (routePolyline) {
+    map.removeLayer(routePolyline);
+    routePolyline = null;
+  }
+  routeShape = [];
+}
+
+export function getRouteShape() {
+  return routeShape;
+}
+
+const amenityCategories = {
+  drinking_water: 'Water / Restrooms',
+  toilets: 'Water / Restrooms',
+  bicycle_repair_station: 'Bike Repair',
+  bicycle: 'Bike Shop',
+  restaurant: 'Food / Rest Stop',
+  fast_food: 'Food / Rest Stop',
+  cafe: 'Food / Rest Stop',
+};
+
 export async function fetchAmenities() {
   if (map.getZoom() < 14) {
-    layers.amenities.clearLayers();
+    layers.amenity_water.clearLayers();
+    layers.amenity_repair.clearLayers();
+    layers.amenity_shop.clearLayers();
+    layers.amenity_food.clearLayers();
     return;
   }
 
   const bounds = map.getBounds();
   const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
-  
+
+  // Clear existing amenity layers
+  layers.amenity_water.clearLayers();
+  layers.amenity_repair.clearLayers();
+  layers.amenity_shop.clearLayers();
+  layers.amenity_food.clearLayers();
+
   try {
     const resp = await fetch(`/api/amenities?bbox=${bbox}`);
     if (resp.status === 429) {
@@ -143,25 +216,41 @@ export async function fetchAmenities() {
       console.warn(`Amenities fetch failed: ${resp.status}`);
       return;
     }
-    
+
     const data = await resp.json();
-    layers.amenities.clearLayers();
-    
+
     data.elements.forEach(el => {
-      const type = el.tags.amenity || el.tags.shop || 'amenity';
-      const name = el.tags.name || (el.tags.amenity === 'drinking_water' ? 'Water Fountain' : 
-                   el.tags.shop === 'bicycle' ? 'Bike Shop' : 'Repair Station');
-      
+      const tags = el.tags || {};
+      const category = tags.shop === 'bicycle'
+        ? 'Bike Shop'
+        : amenityCategories[tags.amenity] || 'Rider Amenities';
+
+      const name = tags.name ||
+        (category === 'Water / Restrooms' ? (tags.amenity === 'toilets' ? 'Restroom' : 'Water Fountain') :
+         category === 'Bike Repair' ? 'Repair Station' :
+         category === 'Bike Shop' ? 'Bike Shop' :
+         category === 'Food / Rest Stop' ? 'Food / Rest Stop' :
+         'Rider Amenity');
+
       const f = {
         name: name,
-        category: 'Rider Amenities',
+        category: category,
         status: 'active',
         officiality: 'official',
-        public_description: el.tags.description || `Type: ${type}`,
-        feature_type: 'point'
+        public_description: tags.description || `${tags.amenity || tags.shop || 'amenity'}`,
+        feature_type: 'point',
       };
-      
-      const marker = L.marker([el.lat, el.lon], { icon: iconFor(f) }).addTo(layers.amenities);
+
+      const targetGroup = {
+        'Water / Restrooms': layers.amenity_water,
+        'Bike Repair': layers.amenity_repair,
+        'Bike Shop': layers.amenity_shop,
+        'Food / Rest Stop': layers.amenity_food,
+      }[category] || null;
+
+      if (!targetGroup) return;
+
+      const marker = L.marker([el.lat, el.lon], { icon: iconFor(f) }).addTo(targetGroup);
       marker.on('click', () => {
         const detailCard = document.getElementById('infoCard');
         if (detailCard) {
@@ -191,12 +280,22 @@ export function renderMap(features, allFeaturesCount, onFeatureClick, onMarkerDr
   features.forEach(f => {
     if (!f.geometry) return;
     const geom = f.geometry;
-    
+
     let targetGroup = layers.knowledge;
     if (f.category === 'Official Regional Data') {
       targetGroup = layers.official;
     } else if (f.category === 'Field Reports') {
       targetGroup = layers.reports;
+    } else if (f.category === 'Planned / in progress' || f.officiality === 'planned') {
+      targetGroup = layers.planned;
+    } else if (['Water / Restrooms', 'Bike Repair', 'Bike Shop', 'Food / Rest Stop'].includes(f.category)) {
+      const mapLayers = {
+        'Water / Restrooms': layers.amenity_water,
+        'Bike Repair': layers.amenity_repair,
+        'Bike Shop': layers.amenity_shop,
+        'Food / Rest Stop': layers.amenity_food,
+      };
+      targetGroup = mapLayers[f.category] || layers.knowledge;
     }
 
     if (f.feature_type === 'point' && geom.type === 'Point') {

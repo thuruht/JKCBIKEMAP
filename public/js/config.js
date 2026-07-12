@@ -56,6 +56,26 @@ export const categoryMeta = {
     icon: '⛲', 
     copy:'Water fountains and bike repair stations from OpenStreetMap.'
   },
+  'Water / Restrooms': {
+    swatch:'#3b82f6ff',
+    icon: '💧',
+    copy: 'Water fountains and restrooms from OpenStreetMap.'
+  },
+  'Bike Repair': {
+    swatch:'#f59e0bff',
+    icon: '🔧',
+    copy: 'Public bicycle repair stations from OpenStreetMap.'
+  },
+  'Bike Shop': {
+    swatch:'#8b5cf6ff',
+    icon: '🚲',
+    copy: 'Local bike shops from OpenStreetMap.'
+  },
+  'Food / Rest Stop': {
+    swatch:'#ec4899ff',
+    icon: '🌮',
+    copy: 'Food, cafes, and rest stops from OpenStreetMap.'
+  },
   'Field Reports': {
     swatch:'#f59e0bff', 
     icon: '⚠️', 

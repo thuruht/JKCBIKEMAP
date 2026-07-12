@@ -25,11 +25,11 @@ export const categoryMeta = {
     icon: '🌳', 
     copy:'Parks that matter because trails or connectors cluster around them.'
   },
-  'Pedestrian or walking bridges': {
+  'Walking / mixed-use bridges': {
     swatch:'#c026d3ff', 
     icon: '🌉', 
     lineWeight: 5, 
-    copy:'Barrier-crossing links over interstates, rail, or hard edges.'
+    copy:'Barrier-crossing links over interstates, rail, or hard edges — walking, rolling, or mixed-use.'
   },
   'Planned / in progress': {
     swatch:'#ef4444ff', 

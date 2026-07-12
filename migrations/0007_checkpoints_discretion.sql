@@ -20,7 +20,7 @@ INSERT INTO badges (id, name, description) VALUES
 ('media-node', 'Media Node', 'Attached high-fidelity media to a feature.');
 
 -- Update Terminology
-UPDATE features SET category = 'Pedestrian or walking bridges' WHERE category = 'Ped bridges / sidewalks';
+UPDATE features SET category = 'Walking / mixed-use bridges' WHERE category IN ('Ped bridges / sidewalks', 'Pedestrian or walking bridges');
 UPDATE features SET name = REPLACE(name, 'Ped Bridge', 'Walking Bridge') WHERE name LIKE '%Ped Bridge%';
 UPDATE features SET name = REPLACE(name, 'ped bridge', 'walking bridge') WHERE name LIKE '%ped bridge%';
-UPDATE features SET public_description = REPLACE(public_description, 'ped bridge', 'pedestrian or walking bridge') WHERE public_description LIKE '%ped bridge%';
+UPDATE features SET public_description = REPLACE(public_description, 'ped bridge', 'walking or mixed-use bridge') WHERE public_description LIKE '%ped bridge%';

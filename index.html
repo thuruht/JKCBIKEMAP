@@ -139,7 +139,7 @@
       {name:'Kessler Park', category:'Key parks', type:'park', coords:[39.121, -94.548], text:'Major northeast bluff park tied to Cliff Drive and trail access above downtown.'},
       {name:'Sheffield Park', category:'Key parks', type:'park', coords:[39.097, -94.489], text:'Northeast industrial zone park near Independence Ave and the Blue River.'},
 
-      {name:'Grand Blvd Bike & Ped Bridge', category:'Ped bridges / sidewalks', type:'ped', coords:[39.116, -94.577], text:'New bike-and-ped bridge opened in May 2026 linking the River Market toward the riverfront.'},
+      {name:'Grand Blvd Bike & Ped Bridge', category:'Walking / mixed-use bridges', type:'walking', coords:[39.116, -94.577], text:'New bike-and-ped bridge opened in May 2026 linking the River Market toward the riverfront.'},
 
       {name:'Oakley Ave Ped Bridge Replacement', category:'Planned / in progress', type:'planned', coords:[39.070, -94.505], text:'Pedestrian bridge over I-70 closed for replacement into 2026; worth watching in the field.'},
       {name:'Grand / Lydia riverfront flyover concept', category:'Planned / in progress', type:'planned', coords:[39.121, -94.565], text:'Future connection concept linking surrounding neighborhoods toward the riverfront.'},
@@ -161,8 +161,8 @@
       {name:'Longview paved trail', category:'Trail spines', color:'#2f855a', weight:4, dash:null, coords:[[38.904,-94.479],[38.898,-94.482],[38.892,-94.486],[38.886,-94.490],[38.878,-94.490],[38.869,-94.488]]},
       {name:'Longview to Grandview connector', category:'Trail spines', color:'#2f855a', weight:4, dash:'4 8', coords:[[38.869,-94.488],[38.850,-94.500],[38.820,-94.525],[38.750,-94.533]]},
       {name:'Fleming / Blue Springs Lake trail zone', category:'Trail spines', color:'#2f855a', weight:4, dash:'4 8', coords:[[39.034,-94.336],[39.025,-94.322],[39.017,-94.308]]},
-      {name:'25th Street Pedestrian Bridge', category:'Ped bridges / sidewalks', color:'#c026d3', weight:4, dash:null, coords:[[39.0812,-94.5483],[39.0818,-94.5455],[39.0826,-94.5432]]},
-      {name:'River Market bridge link', category:'Ped bridges / sidewalks', color:'#c026d3', weight:4, dash:'2 8', coords:[[39.112,-94.579],[39.116,-94.577],[39.121,-94.575]]},
+      {name:'25th Street Pedestrian Bridge', category:'Walking / mixed-use bridges', color:'#c026d3', weight:4, dash:null, coords:[[39.0812,-94.5483],[39.0818,-94.5455],[39.0826,-94.5432]]},
+      {name:'River Market bridge link', category:'Walking / mixed-use bridges', color:'#c026d3', weight:4, dash:'2 8', coords:[[39.112,-94.579],[39.116,-94.577],[39.121,-94.575]]},
       {name:'Oakley replacement zone', category:'Planned / in progress', color:'#ef4444', weight:4, dash:'10 8', coords:[[39.064,-94.510],[39.070,-94.505],[39.076,-94.500]]},
       {name:'Lydia flyover concept', category:'Planned / in progress', color:'#ef4444', weight:4, dash:'10 8', coords:[[39.118,-94.570],[39.121,-94.565],[39.126,-94.560]]},
       {name:'Gillham-Trolley-Brush connector', category:'Planned / in progress', color:'#ef4444', weight:4, dash:'10 8', coords:[[39.037,-94.579],[39.042,-94.576],[39.048,-94.573]]},
@@ -177,7 +177,7 @@
       'Neighborhoods': {swatch:'#6b5cff', copy:'Mental-map neighborhoods and stepping-stone areas.'},
       'Boundary anchors': {swatch:'#111111', copy:'Your metro diamond and edge anchors.'},
       'Key parks': {swatch:'#2f855a', copy:'Parks that matter because trails or connectors cluster around them.'},
-      'Ped bridges / sidewalks': {swatch:'#c026d3', copy:'Barrier-crossing links over interstates, rail, or hard edges.'},
+      'Walking / mixed-use bridges': {swatch:'#c026d3', copy:'Barrier-crossing links over interstates, rail, or hard edges — walking, rolling, or mixed-use.'},
       'Planned / in progress': {swatch:'#ef4444', copy:'Watch-list projects that may become useful before official completion.'},
       'Surface / connector notes': {swatch:'#8f8a80', copy:'Street stitches and condition-sensitive connectors.'}
     };
@@ -209,7 +209,7 @@
     const infoCard = document.getElementById('infoCard');
 
     function iconFor(type){
-      const colors = {neighborhood:'#6b5cff', anchor:'#a0512d', boundary:'#111111', park:'#2f855a', ped:'#c026d3', planned:'#ef4444'};
+      const colors = {neighborhood:'#6b5cff', anchor:'#a0512d', boundary:'#111111', park:'#2f855a', walking:'#c026d3', planned:'#ef4444'};
       const fill = colors[type] || '#444444';
       return L.divIcon({
         className:'custom-marker',
@@ -226,7 +226,7 @@
       const marker = L.marker(pt.coords, {icon: iconFor(pt.type)}).addTo(map);
       marker.bindPopup(`<strong>${pt.name}</strong><br>${pt.text}`);
       marker.on('click', () => {
-        const note = pt.type === 'anchor' ? 'Anchor point' : pt.type === 'boundary' ? 'Boundary anchor' : pt.type === 'park' ? 'Park anchor' : pt.type === 'ped' ? 'Ped bridge / sidewalk link' : pt.type === 'planned' ? 'Planned / in progress' : 'Neighborhood node';
+        const note = pt.type === 'anchor' ? 'Anchor point' : pt.type === 'boundary' ? 'Boundary anchor' : pt.type === 'park' ? 'Park anchor' : pt.type === 'walking' ? 'Walking / mixed-use bridge link' : pt.type === 'planned' ? 'Planned / in progress' : 'Neighborhood node';
         infoCard.innerHTML = `<h3>${pt.name}</h3><p>${pt.text}</p><p class="note">${note}</p>`;
       });
       pt._marker = marker;
@@ -246,7 +246,7 @@
     function flyToPoint(pt){
       map.flyTo(pt.coords, 14, {duration:1.05});
       pt._marker.openPopup();
-      const note = pt.type === 'anchor' ? 'Anchor point' : pt.type === 'boundary' ? 'Boundary anchor' : pt.type === 'park' ? 'Park anchor' : pt.type === 'ped' ? 'Ped bridge / sidewalk link' : pt.type === 'planned' ? 'Planned / in progress' : 'Neighborhood node';
+      const note = pt.type === 'anchor' ? 'Anchor point' : pt.type === 'boundary' ? 'Boundary anchor' : pt.type === 'park' ? 'Park anchor' : pt.type === 'walking' ? 'Walking / mixed-use bridge link' : pt.type === 'planned' ? 'Planned / in progress' : 'Neighborhood node';
       infoCard.innerHTML = `<h3>${pt.name}</h3><p>${pt.text}</p><p class="note">${note}</p>`;
     }
 

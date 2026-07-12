@@ -24,7 +24,7 @@ export function updateInfoCard(f, infoCardElement, userPermissions = []) {
   }
 
   const statusColor = f.status === 'active' ? '#10b981ff' : f.status === 'caution' ? '#f59e0bff' : '#ef4444ff';
-  const catIcon = f.category === 'Pedestrian or walking bridges' ? '🌉' : 
+  const catIcon = f.category === 'Walking / mixed-use bridges' ? '🌉' :
                   f.category === 'Trail spines' ? '🌿' : 
                   f.category === 'Field Reports' ? '⚠️' : 
                   f.category === 'Rider Amenities' ? '⛲' : 

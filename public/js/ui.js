@@ -304,6 +304,15 @@ export function closeHelpModal() {
   helpModal.style.display = 'none';
 }
 
+const closeHelpBtn = document.getElementById('closeHelpBtn');
+if (closeHelpBtn) closeHelpBtn.onclick = closeHelpModal;
+
+if (helpModal) {
+  helpModal.addEventListener('click', (e) => {
+    if (e.target === helpModal) closeHelpModal();
+  });
+}
+
 export function openModal(f = null, type = 'point', preventReset = false) {
   populateCategorySelect();
   modal.style.display = 'grid';
@@ -437,7 +446,7 @@ export function initThemeToggle() {
     if (syncToggle && syncToggle.checked) {
       const basemapSelect = document.getElementById('basemapSelect');
       if (basemapSelect) {
-        const targetBasemap = theme === 'dark' ? 'night' : 'pioneer';
+        const targetBasemap = theme === 'dark' ? 'dark' : 'pioneer';
         const { switchBasemap } = await import('./map.js');
         switchBasemap(targetBasemap);
         basemapSelect.value = targetBasemap;

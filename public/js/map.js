@@ -86,6 +86,9 @@ let layers = {
   }),
   hiking_trails: L.tileLayer('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', {
     attribution: '&copy; Waymarked Trails', maxZoom: 18, transparent: true, opacity: 0.8
+  }),
+  weather_radar: L.tileLayer('https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png', {
+    attribution: 'Iowa Environmental Mesonet / NWS', maxZoom: 18, transparent: true, opacity: 0.7
   })
 };
 
@@ -116,7 +119,7 @@ export function initLeafletMap(elementId, center, zoom) {
   map.removeLayer(layers.amenity_shop);
   map.removeLayer(layers.amenity_food);
 
-  // Add default overlays
+  // Add default overlays (weather radar starts off and is toggled by the user)
   layers.cycling_routes.addTo(map);
   layers.hiking_trails.addTo(map);
   
@@ -336,6 +339,32 @@ export function renderMap(features, allFeaturesCount, onFeatureClick, onMarkerDr
       poly.on('click', () => onFeatureClick(f));
       f._layer = poly;
       coords.forEach(c => allBounds.push(c));
+    } else if (f.feature_type === 'line' && geom.type === 'MultiLineString') {
+      const latlngs = geom.coordinates.map(part => part.map(c => [c[1], c[0]]));
+      const meta = getCategoryMeta(f.category);
+      const isPlanned = f.officiality === 'planned' || f.category === 'Planned / in progress';
+      const poly = L.polyline(latlngs, {
+        color: meta.swatch,
+        weight: meta.lineWeight || 5,
+        dashArray: meta.lineDash || (isPlanned ? '10 10' : null)
+      }).addTo(targetGroup);
+      poly.on('click', () => onFeatureClick(f));
+      f._layer = poly;
+      latlngs.flat().forEach(c => allBounds.push(c));
+    } else if ((f.feature_type === 'polygon' || geom.type === 'Polygon') && geom.type === 'Polygon') {
+      const latlngs = geom.coordinates[0].map(c => [c[1], c[0]]);
+      const meta = getCategoryMeta(f.category);
+      const isPlanned = f.officiality === 'planned' || f.category === 'Planned / in progress';
+      const poly = L.polygon(latlngs, {
+        color: meta.swatch,
+        fillColor: meta.swatch,
+        fillOpacity: 0.25,
+        weight: 2,
+        dashArray: meta.lineDash || (isPlanned ? '10 10' : null)
+      }).addTo(targetGroup);
+      poly.on('click', () => onFeatureClick(f));
+      f._layer = poly;
+      latlngs.forEach(c => allBounds.push(c));
     }
   });
 

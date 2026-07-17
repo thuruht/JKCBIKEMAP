@@ -1,8 +1,9 @@
-import type { ExecutionContext } from "@cloudflare/workers-types";
+import type { ExecutionContext, ScheduledEvent } from "@cloudflare/workers-types";
 import { Hono } from "hono";
 import { routeRoutes } from "./routes/route.js";
 import { geocodeRoutes } from "./routes/geocode.js";
 import { healthRoutes } from "./routes/health.js";
+import { runAllSyncs } from "./tasks/index.js";
 import type { Env } from "./types.js";
 
 export type { Env };
@@ -181,7 +182,7 @@ export default {
     const response = await env.ASSETS.fetch(request);
     const newHeaders = new Headers(response.headers);
     // Relaxed CSP to allow internal scripts, Leaflet, GSAP, and Cloudflare Analytics
-    const csp = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org https://*.vis.earthdata.nasa.gov https://*.arcgisonline.com https://*.tile-cyclosm.openstreetmap.fr https://mt1.google.com https://*.tile.thunderforest.com https://*.tile.openstreetmap.fr https://tile.osm.ch https://tile.memomaps.de https://*.tiles.openrailwaymap.org https://tile.waymarkedtrails.org; connect-src 'self' wss://chat.jojomap.kcmo.xyz wss://chat.map.distorted.work https://overpass-api.de https://overpass.osm.ch https://nominatim.openstreetmap.org https://cloudflareinsights.com https://*.cloudflareinsights.com;";
+    const csp = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://tiles.stadiamaps.com https://*.tile.opentopomap.org https://*.vis.earthdata.nasa.gov https://*.arcgisonline.com https://*.tile-cyclosm.openstreetmap.fr https://mt1.google.com https://*.tile.thunderforest.com https://*.tile.openstreetmap.fr https://tile.osm.ch https://tile.memomaps.de https://*.tiles.openrailwaymap.org https://tile.waymarkedtrails.org https://mesonet.agron.iastate.edu; connect-src 'self' wss://chat.jojomap.kcmo.xyz wss://chat.map.distorted.work https://overpass-api.de https://overpass.osm.ch https://nominatim.openstreetmap.org https://cloudflareinsights.com https://*.cloudflareinsights.com;";
     newHeaders.set("Content-Security-Policy", csp);
     
     return new Response(response.body, {
@@ -189,6 +190,10 @@ export default {
       statusText: response.statusText,
       headers: newHeaders
     });
+  },
+
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runAllSyncs(env));
   },
 };
 
@@ -282,82 +287,6 @@ async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<
   return new Response("Not Found", { status: 404 });
 }
 
-async function handleMarcImport(env: Env): Promise<Response> {
-  const MARC_URL = 'https://gis2.marc.org/arcgis/rest/services/Recreation/BikewaysAndTrails/MapServer/10/query?where=1%3D1&outFields=*&f=geojson';
-
-  try {
-    console.log("Fetching MARC data from:", MARC_URL);
-    const resp = await fetch(MARC_URL, {
-      headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://jojomap.kcmo.xyz/'
-      }
-    });
-    
-    if (!resp.ok) {
-      const errText = await resp.text();
-      return new Response(`MARC API Error ${resp.status}: ${errText.slice(0, 100)}`, { status: 500 });
-    }
-    
-    const data = await resp.json() as any;
-
-    if (!data.features || !Array.isArray(data.features)) {
-      return new Response("MARC Data missing features array", { status: 500 });
-    }
-
-    const limit = 200; // Total features to import
-    const batchSize = 50; // Features per D1 transaction
-    const featuresToProcess = data.features.slice(0, limit);
-    let importedCount = 0;
-
-    for (let i = 0; i < featuresToProcess.length; i += batchSize) {
-      const chunk = featuresToProcess.slice(i, i + batchSize);
-      const statements: any[] = [];
-
-      for (const feature of chunk) {
-        const props = feature.properties || {};
-        const geom = feature.geometry;
-        if (!geom) continue;
-
-        const name = props.RouteName || props.Name || props.TrailName || 'Unnamed MARC Trail';
-        const jurisdiction = props.Jurisdiction || props.City || 'Regional';
-        const facility = props.FacilityType || props.Type || 'Trail';
-        const surface = props.SurfaceType || props.Surface || 'Unknown';
-        
-        const slug = 'marc-' + crypto.randomUUID();
-        const id = crypto.randomUUID();
-
-        statements.push(env.DB.prepare(`
-          INSERT OR IGNORE INTO features (id, slug, name, feature_type, category, status, visibility, officiality, public_description, surface_note)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(id, slug, name, 'line', 'Official Regional Data', 'active', 'public', 'official',
-          `Jurisdiction: ${jurisdiction}. Type: ${facility}.`,
-          surface));
-
-        statements.push(env.DB.prepare("INSERT OR IGNORE INTO feature_geometries (feature_id, public_geometry) VALUES (?, ?)")
-          .bind(id, JSON.stringify(geom)));
-      }
-
-      if (statements.length > 0) {
-        try {
-          await env.DB.batch(statements);
-          importedCount += chunk.length;
-        } catch (batchErr: any) {
-          console.error("Batch Import Error:", batchErr.message);
-          throw new Error(`D1 Batch failed: ${batchErr.message}`);
-        }
-      }
-    }
-
-    return new Response(`Successfully imported ${importedCount} MARC features in chunks.`, { status: 200 });
-  } catch (err: any) {
-    console.error("Critical Import Error:", err.message);
-    return new Response(`Server Error during MARC import. Check worker logs for details.`, { status: 500 });
-  }
-}
-
 async function handleApiRequest(request: Request, env: Env, url: URL): Promise<Response> {
   try {
     const method = request.method;
@@ -397,12 +326,13 @@ async function handleApiRequest(request: Request, env: Env, url: URL): Promise<R
       }
       }
 
-      // 2. Admin: MARC Import
-      if (method === "POST" && fullPath === "/admin/import-marc") {
+      // 2. Admin: Data Sync
+      if (method === "POST" && fullPath === "/admin/sync-data") {
       if (!hasPermission(role, "feature.import_official")) {
         return new Response("Unauthorized", { status: 401 });
       }
-      return handleMarcImport(env);
+      const summary = await runAllSyncs(env);
+      return jsonResponse(summary, 200, request);
       }
 
       // 3. Admin: Manage Roles

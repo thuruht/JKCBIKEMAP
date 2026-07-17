@@ -340,7 +340,13 @@ async function init() {
 
   initThemeToggle();
   initLeafletMap('map', [39.03, -94.535], 12);
-  
+
+  const currentTheme = document.documentElement.getAttribute('data-theme') || localStorage.getItem('theme');
+  if (currentTheme === 'dark') {
+    switchBasemap('dark');
+    if (basemapSelect) basemapSelect.value = 'dark';
+  }
+
   if (map) {
     map.on('click', (e) => {
       if (e.originalEvent.target.id === 'map' || e.originalEvent.target.classList.contains('leaflet-container')) {
@@ -594,11 +600,11 @@ async function init() {
 
   if (importMarcBtn) {
     importMarcBtn.addEventListener('click', async () => {
-      if (!confirm('This will fetch and import the latest MARC regional trail data. Proceed?')) return;
+      if (!confirm('This will fetch and sync the latest official regional trail data. Proceed?')) return;
       try {
         importMarcBtn.disabled = true;
-        importMarcBtn.textContent = 'Importing...';
-        const res = await fetch('/admin/import-marc', { method: 'POST' });
+        importMarcBtn.textContent = 'Syncing...';
+        const res = await fetch('/admin/sync-data', { method: 'POST' });
         if (!res.ok) throw new Error(await res.text());
         const msg = await res.text();
         alert(msg);
@@ -606,7 +612,7 @@ async function init() {
       } catch (err) {
         alert('Failed: ' + err.message);
         importMarcBtn.disabled = false;
-        importMarcBtn.textContent = 'Import MARC Trails';
+        importMarcBtn.textContent = 'Sync Official Data';
       }
     });
   }
@@ -776,7 +782,7 @@ async function init() {
   });
 
   // Overlay toggles + opacity
-  const overlays = ['railway', 'cycling_routes', 'hiking_trails'];
+  const overlays = ['railway', 'cycling_routes', 'hiking_trails', 'weather_radar'];
   overlays.forEach(name => {
     const toggle = document.getElementById(`overlay-${name}`);
     const slider = document.getElementById(`opacity-${name}`);

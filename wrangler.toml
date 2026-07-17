@@ -40,3 +40,6 @@ custom_domain = true
 # In case we need durable objects later
 # [durable_objects]
 # bindings = []
+
+[triggers]
+crons = ["0 4 * * *"]

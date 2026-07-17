@@ -80,6 +80,13 @@ export const categoryMeta = {
     swatch:'#f59e0bff', 
     icon: '⚠️', 
     copy:'Real-time condition reports from other riders.'
+  },
+  'Construction': {
+    swatch:'#f97316ff',
+    icon: '🚧',
+    lineWeight: 3,
+    lineDash: '8 8',
+    copy:'Active or planned construction projects.'
   }
 };
 

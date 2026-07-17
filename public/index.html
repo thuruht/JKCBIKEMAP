@@ -187,6 +187,11 @@
                 <span class="summary-label">Hiking Trails (Waymarked)</span>
               </label>
               <input type="range" id="opacity-hiking_trails" min="0" max="1" step="0.1" value="0.8" class="opacity-slider">
+              <label class="layer-toggle">
+                <input type="checkbox" id="overlay-weather_radar">
+                <span class="summary-label">Weather Radar (NWS/IEM)</span>
+              </label>
+              <input type="range" id="opacity-weather_radar" min="0" max="1" step="0.1" value="0.7" class="opacity-slider">
             </div>
 
             <p style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-primary); margin-bottom: 6px;">Show / Hide By Type</p>
@@ -341,7 +346,7 @@
                 <button id="addPointBtn" class="jump-btn" style="flex: 1; text-align: center; background: var(--color-surface);">+ Point</button>
                 <button id="addLineBtn" class="jump-btn" style="flex: 1; text-align: center; background: var(--color-surface);">+ Line</button>
               </div>
-              <button id="importMarcBtn" class="jump-btn" style="width: 100%; text-align: center; background: var(--color-primary-soft); margin-top: var(--space-2); display: none;">Run MARC Import</button>
+              <button id="importMarcBtn" class="jump-btn" style="width: 100%; text-align: center; background: var(--color-primary-soft); margin-top: var(--space-2); display: none;">Sync Official Data</button>
               <button id="exportGeoJsonBtn" class="jump-btn" style="width: 100%; text-align: center; background: var(--color-surface); margin-top: var(--space-2);">Export GeoJSON</button>
             </div>
 
